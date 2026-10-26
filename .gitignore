@@ -1,0 +1,24 @@
+# Игнорировать всё
+*
+
+# Корень
+!/.gitignore
+!/README.md
+!/MODDING-NOTES.md
+!/rulesmd.ini
+!/artmd.ini
+
+# Папка Asolated: только два файла
+!/Asolated/
+/Asolated/*
+!/Asolated/rulesmd.ini
+!/Asolated/artmd.ini
+
+# Папка mhn: только один файл
+!/mhn/
+/mhn/*
+!/mhn/mix_rulesmd.ini
+
+# Ваши Lua-скрипты (поправьте путь под свою структуру)
+!/Lua/
+!/Lua/**
