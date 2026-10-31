@@ -1,12 +1,12 @@
-# Ignore everything by default
-*
+# Runtime logs and local artifacts
+mods/*/logs/
+*.log
+injector_log.txt
+LuaAPI.crash.log
+benchmark.log
+except.txt
 
-# Allowed files in the repo root
-!/.gitignore
-!/README.md
-!/rulesmd.ini
-!/artmd.ini
-
-# Lua scripts (adjust path to your structure)
-!/Lua/
-!/Lua/**
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,12 @@
+{
+  "id": "Yuris-Echo",
+  "name": "Yuri's Echo",
+  "version": "0.1.0",
+  "description": "What if Yuri Prime was actually alive after RA2YR?",
+  "requires": [
+    "LuaAPI 0.2.0"
+  ],
+  "rules": "rulesmd.ini [AM2] Primary=AM2Paint / ElitePrimary=AM2Paint; [AM2Paint] Damage=55, ROF=70, Range=5, IsLaser=true, LaserDuration=45",
+  "keys": "",
+  "conflicts": []
+}

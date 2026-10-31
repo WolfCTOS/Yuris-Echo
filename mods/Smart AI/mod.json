@@ -1,0 +1,19 @@
+{
+  "id": "Smart AI",
+  "name": "Smart AI",
+  "version": "0.2.0",
+  "description": "ИИ-командир поверх LuaAPI: находит боевые юниты каждого ИИ-дома, выбирает самого слабого врага и постоянно отдаёт Attack по МСЦ и производству, сносит оборону, ведёт артиллерийскую подготовку и держит экономику. Стили: Allied — технологично, Soviet — агрессивно, Yuri — асимметрично. Игрока-наблюдателя не трогает.",
+  "requires": [
+    "LuaAPI 0.2.0"
+  ],
+  "entry": "smartai.lua",
+  "rules": "rulesmd.ini [Countries] (имена домов) + типы зданий/юнитов; API: World.GetBuildings/GetUnits, unit:Attack/GetTarget/GetKind, house:AddCredits, unit:TakeDamage",
+  "keys": "P — подробный лог в чат",
+  "conflicts": [],
+  "load": {
+    "folder": "mods/Smart AI",
+    "main": "main.lua",
+    "active": true,
+    "note": "включается строкой Smart AI в mods/active_mods.txt"
+  }
+}

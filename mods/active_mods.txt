@@ -1,0 +1,5 @@
+# LuaAPI active mods - one mod ID per line
+Smart AI
+Yuris-Echo
+AI Telemetry
+AI Ignore

@@ -1,0 +1,10 @@
+{
+  "id": "ltnk_emp_nerf",
+  "name": "EMP Nerf for Yuri T3 Lasher Tanks (LTNK)",
+  "version": "1.0.0",
+  "description": "Half of the Yuri Lasher Light Tanks (LTNK) are held in an EMP-paralyzed (engine disabled) state until the human player builds a War Factory (GAWEAP/NAWEAP/YAWEAP). After that every tank returns to full strength. Per-unit runtime decision, so the AI is handled by the same rule set.",
+  "requires": ["LuaAPI 0.2.0"],
+  "rules": "rulesmd.ini [LTNK] (Owner=YuriCountry, Prerequisite=YAWEAP); War Factories: [GAWEAP] Allied, [NAWEAP] Soviet, [YAWEAP] Yuri",
+  "keys": "N - toggle the EMP hold by hand (debug)",
+  "conflicts": []
+}

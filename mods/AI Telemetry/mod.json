@@ -1,0 +1,17 @@
+{
+  "id": "AI Telemetry",
+  "name": "AI Telemetry",
+  "version": "0.1.0",
+  "description": "Пишет JSONL-лог матча по каждому дому: срезы экономики/энергии/зданий/войск, события появления и потери объектов, приказы и цели юнитов, ванильные ИИ-группы (World.GetAITeams). Внутренние решения движка не логируются — их LuaAPI не отдаёт.",
+  "requires": ["LuaAPI 0.2.0"],
+  "entry": "telemetry.lua",
+  "rules": "не требует правок rulesmd.ini; читает состояние только через LuaAPI",
+  "keys": "",
+  "conflicts": [],
+  "load": {
+    "folder": "mods/AI Telemetry",
+    "main": "main.lua",
+    "active": true,
+    "note": "логи: mods/AI Telemetry/logs/match-<дата>.jsonl"
+  }
+}
