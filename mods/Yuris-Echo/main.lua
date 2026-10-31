@@ -1,67 +1,87 @@
--- Yuri's Echo - AM2 laser paint + Guardian GI rocket volley.
+-- Yuri's Echo - AM2 laser + 120mm cannon, plus Alliance support abilities.
 --
--- Design (matches rulesmd.ini [AM2Paint]):
---   1. The AM2 fires its 105mm gun as a red laser designator beam: one weapon,
---      cannon damage 55 with IsLaser=true, drawn for LaserDuration=45 frames
---      (~3 s), so every shot is a cannon hit plus a visible paint.
---   2. PAINT_FRAMES (45) frames after the beam, three Guardian GI rocket hits
---      land, 4 frames apart, with the rocket warhead GUARDWH.
---   3. The cycle repeats every ROF_FRAMES (70) frames, the same period as the
---      gun's ROF, so each shot is followed by exactly one volley and the two
---      stay in sync instead of drifting.
+-- AM2 (table row "AM2"):
+--   1. The engine fires [AM2Paint]: a red laser designator (Damage=55,
+--      IsLaser=true, LaserDuration=45), so every shot is a visible paint.
+--   2. PAINT_FRAMES (45) after the beam a 120mm shell lands for 105 AP.
+--      Laser 55 + shell 105 = 160 per ROF=70, about 80% of the Apocalypse's
+--      2 x 100 volley. Both weapons hit the same target one after another.
+--   3. The cycle repeats every ROF_FRAMES (70) frames, the same period as
+--      [AM2Paint] ROF, so the shell never drifts away from the beam.
 --
--- Damage: 3 x 35 = 105 per volley, plus 55 from the gun = 160 per shot, i.e.
--- 20% below the Apocalypse's 2 x 100 volley: AM2 is meant to be APOC's rival,
--- not its superior. The Alliance keeps its edge through technology - the laser
--- designator, faster speed and longer sight - not through raw damage.
--- GUARDWH is the Guardian GI rocket warhead (100% vs heavy armour).
---
--- Engine limit: this build cannot spawn projectiles from Lua (FireProjectile and
--- the BulletHook were removed; World.DetonateAt only accepts radiation weapons),
--- so the rockets are applied as engine damage and are not drawn in flight. The
--- visible part of the mechanic is the laser paint itself, which is a real engine
--- IsLaser beam. Damage also carries no attacker reference, so kills from the
--- volley are not credited to the tank.
+-- Engine limit: this build cannot spawn projectiles from Lua (FireProjectile
+-- and the BulletHook were removed; World.DetonateAt only accepts radiation
+-- weapons), so the shell is applied as engine damage and is not drawn in
+-- flight. The visible part is the laser beam. Damage carries no attacker
+-- reference, so kills from the shell are not credited to the tank.
 --
 -- Callbacks: only Update is defined on the returned table. OnScenarioStart is a
 -- global with last-write-wins semantics shared by every loaded mod, so this mod
 -- never defines it; a new match is detected from the frame counter restarting.
 
 -- Implemented in this file:
---   AM2    - laser paint + Guardian GI rocket volley
---   CMIN   - emergency EMP at <=50% HP, 60 s cooldown
+--   AM2    - laser paint + 120mm shell (about 80% of the Apocalypse)
+--   CMIN   - at <=50% HP: EMP, chrono jump to a refinery, new field (60 s)
 --   MGTK   - 20 dmg/s burn for 5 s while the Mirage keeps firing
 --   BFRT   - heals passengers (10 HP/s), defuses passenger bombs and
 --            releases ~50% of passengers when the fortress is destroyed
+--   CCOMAND- 20 s teleport recharge after every chrono warp
+--   DLPH   - deploy key (D): sonic EMP pulse, 60 s recharge per dolphin
+--
+-- Implemented in rulesmd.ini:
+--   GGI    - M60 rifle, Deploy fires GGILaser (40 dmg, range 8)
+--   JUMPJET- ground-only 2-rocket volley, elite uses the same weapon
+--   GHOST  - Sensors 7 (SEAL)
+--   SPY    - cloak while idle, Speed 5
+--   CCOMAND- ChronoMP5AT anti-tank weapon
+--   CLEG   - psionic immunity (no Sensors)
+--   TANYA  - Sensors 9, Speed 9, Assaulter
+--   SREF   - MinimumRange 1, native ShrapnelWeapon chain (3 x 80)
+--   MGTK   - Sensors 7
+--   ROBO   - Sensors 9
+--   DEST   - SensorsSight 8
+--   AEGIS  - Tomahawk land attack, VHPScan
+--   CARRIER- SpawnsNumber 5
+--   BEAG   - Phobos AttachEffect target painter (+15% damage taken, slow)
+--   E2     - M1Carbine +20%
 
 local YurisEcho = {}
 
 local UNIT_TYPE      = "AM2"
 local PAINT_FRAMES   = 45    -- 3 s at 15 logic frames/s; must equal LaserDuration
-local ROCKETS        = 3     -- rockets per volley
-local ROCKET_DAMAGE  = 35    -- 3 x 35 + 55 gun = 160 = 20% under APOC's 2 x 100
-local ROCKET_WARHEAD = "GUARDWH" -- Guardian GI rocket warhead
-local ROCKET_GAP     = 4     -- frames between rocket impacts
+local SHELL_DAMAGE   = 105   -- 105 + 55 laser = 160 = 20% under APOC's 2 x 100
+local SHELL_WARHEAD  = "AP"  -- 120mm anti-armour shell
 local ROF_FRAMES     = 70    -- must equal [AM2Paint] ROF
 local AIM_FRAMES     = 8     -- grace frames for the turret to turn before painting
 local MAX_RANGE      = 6.5   -- cells; paint is dropped if the target gets away
-local WAIT_FRAMES    = ROF_FRAMES - PAINT_FRAMES - (ROCKETS - 1) * ROCKET_GAP
+local WAIT_FRAMES    = ROF_FRAMES - PAINT_FRAMES
 local LOG            = true
 
--- Per-tank state: [unitId] = { phase, t, paintUntil, target, sent, nextHit }
+-- Per-tank state: [unitId] = { phase, t, paintUntil, target }
 local state = {}
 local lastFrame = nil
-local warhead = ROCKET_WARHEAD
-local warheadChecked = false
-local firstVolleyLogged = false
+local firstShellLogged = false
 
--- Chrono Miner emergency EMP (table row "Chrono-miner"): at <=50% HP, no more
--- than once per minute, disable enemy vehicles/aircraft around the miner.
+-- Chrono Miner (table row "Chrono-miner"): at <=50% HP, no more than once per
+-- minute, disable enemy vehicles/aircraft around the miner, then jump to the
+-- owner's refinery and re-task the harvester on a field near the base.
 local CMIN_TYPE          = "CMIN"
 local CMIN_TRIGGER       = 0.50
-local CMIN_COOLDOWN      = 900  -- 60 s at 15 logic frames/s
+-- Long cooldowns are wall-clock seconds: the engine frame counter follows the
+-- render rate, so a frame-based "minute" would shrink on high-FPS machines.
+local CMIN_COOLDOWN_SEC  = 60
 local CMIN_EMP_RADIUS    = 4    -- cells (starting value; tune in game)
-local CMIN_EMP_FRAMES    = 90   -- 6 s disable
+local CMIN_EMP_FRAMES    = 90   -- engine frames for Disable (6 s at 15 fps)
+local CMIN_REFINERIES    = { GAREFN = true, NAREFN = true, YAREFN = true }
+local CMIN_POST_WARP     = 30   -- frames to let the warp-in finish
+-- Landing cells around the refinery: rings of increasing radius, eight
+-- directions each. Cells the engine refuses (occupied/building/water) are
+-- skipped by trying the next one, so a crowded base still finds a spot.
+local CMIN_WARP_RADII    = { 2, 3, 4 }
+local CMIN_WARP_DIRS     = {
+    { 1, 0 }, { 1, 1 }, { 0, 1 }, { -1, 1 },
+    { -1, 0 }, { -1, -1 }, { 0, -1 }, { 1, -1 },
+}
 local minerState         = {}
 local minersSeen         = {}
 
@@ -89,25 +109,17 @@ local bfrtSeen            = {}
 local bfrtFirstHealLogged = false
 local bfrtFirstBombLogged = false
 
+-- Chrono Commando (CCOMAND): long teleport recharge, and the warp leaves
+-- him unable to act for the same period (vulnerable after the jump).
+local CCOMAND_TYPE      = "CCOMAND"
+local CCOMAND_RECHARGE  = 300  -- 20 s at 15 logic frames/s
+local commandoState     = {}
+local commandoSeen      = {}
+local commandoLogged    = false
+
 local function log(msg)
     if LOG then
         print("[Yuri's Echo] " .. tostring(msg))
-    end
-end
-
-local function resolveWarhead()
-    if warheadChecked then
-        return
-    end
-    warheadChecked = true
-    local ok, exists = pcall(function() return Engine.WarheadExists(ROCKET_WARHEAD) end)
-    if ok and exists then
-        log("volley warhead " .. ROCKET_WARHEAD .. " (Guardian GI rocket)")
-    else
-        -- TakeDamage would otherwise fall back silently to TerrorBombWH, which is
-        -- nearly useless against armour and gives burning-infantry deaths.
-        warhead = "AP"
-        log("WARNING: warhead " .. ROCKET_WARHEAD .. " missing from rules, using AP")
     end
 end
 
@@ -131,15 +143,118 @@ local function hostile(a, b)
     return ok and allied == false
 end
 
--- CMIN: one emergency EMP pulse when the miner drops to <=50% HP, then a
--- 60-second cooldown. Only enemy vehicles/aircraft are disabled; infantry and
--- buildings are left alone.
+-- CMIN: emergency EMP pulse plus chrono jump home.
+-- Only enemy vehicles/aircraft are disabled; infantry and buildings are left
+-- alone. The jump uses the native FootClass::ChronoWarpTo path (LuaAPI
+-- unit:ChronoWarpTo), the same warp the engine performs for chrono units.
+local function houseName(house)
+    local ok, name = pcall(function() return house:GetName() end)
+    if ok then
+        return name
+    end
+    return nil
+end
+
+-- Nearest building of `ownerName`; refineries only when `refineryOnly` is set.
+local function nearestOwnBuilding(ownerName, pos, refineryOnly)
+    local ok, buildings = pcall(World.GetBuildings)
+    if not ok or type(buildings) ~= "table" then
+        return nil
+    end
+
+    local best, bestDist = nil, nil
+    for _, b in ipairs(buildings) do
+        local typeOk, typeName = pcall(function() return b:GetTypeName() end)
+        if typeOk and typeName and (not refineryOnly or CMIN_REFINERIES[typeName]) then
+            local ownerOk, bOwner = pcall(function() return b:GetOwner() end)
+            if ownerOk and bOwner then
+                local nameOk, bName = pcall(function() return bOwner:GetName() end)
+                if nameOk and bName == ownerName then
+                    local posOk, bPos = pcall(function() return b:GetPosition() end)
+                    if posOk and bPos then
+                        local dx, dy = bPos.x - pos.x, bPos.y - pos.y
+                        local dist = dx * dx + dy * dy
+                        if not bestDist or dist < bestDist then
+                            best, bestDist = bPos, dist
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- Try the rings around `home` until the engine accepts a landing cell.
+local function warpToRings(u, home)
+    for _, radius in ipairs(CMIN_WARP_RADII) do
+        for _, dir in ipairs(CMIN_WARP_DIRS) do
+            local cx = home.x + dir[1] * radius
+            local cy = home.y + dir[2] * radius
+            local ok, warped = pcall(function() return u:ChronoWarpTo(cx, cy) end)
+            if ok and warped then
+                return { x = cx, y = cy }
+            end
+        end
+    end
+    return nil
+end
+
+-- Jump the miner next to its nearest refinery (any own building if the
+-- refinery is gone) and schedule the post-warp harvest order.
+local function jumpMinerHome(u, ownerName, pos, frame, s)
+    local home = nearestOwnBuilding(ownerName, pos, true)
+    local homeIsRefinery = home ~= nil
+    if not home then
+        home = nearestOwnBuilding(ownerName, pos, false)
+    end
+    if not home then
+        log("CMIN emergency EMP only: no own refinery to jump to")
+        return false
+    end
+
+    local dest = warpToRings(u, home)
+    if not dest and homeIsRefinery then
+        -- Every cell around the refinery is blocked: fall back to another own
+        -- building rather than leaving the miner in the field.
+        local fallback = nearestOwnBuilding(ownerName, pos, false)
+        if fallback and (fallback.x ~= home.x or fallback.y ~= home.y) then
+            dest = warpToRings(u, fallback)
+            if dest then
+                homeIsRefinery = false
+            end
+        end
+    end
+    if not dest then
+        log("CMIN chrono jump failed: no landing cell around the home building")
+        return false
+    end
+
+    s.pendingHarvest = frame + CMIN_POST_WARP
+    s.hx, s.hy = dest.x, dest.y
+    log(string.format("CMIN emergency jump to %s cell %d,%d",
+        homeIsRefinery and "refinery" or "base building", dest.x, dest.y))
+    return true
+end
+
 local function stepChronoMiner(u, frame)
     local idOk, id = pcall(function() return u:GetId() end)
     if not idOk or not id then
         return
     end
     minersSeen[id] = true
+
+    local s = minerState[id]
+
+    -- After the warp the harvester must not drive back to the field where it
+    -- was ambushed; re-task it at the landing cell near the base instead.
+    if s and s.pendingHarvest and frame >= s.pendingHarvest then
+        local hx, hy = s.hx, s.hy
+        s.pendingHarvest = nil
+        local ok = pcall(function() return u:HarvestAt(hx, hy) end)
+        log(string.format("CMIN post-warp harvest order at %d,%d -> %s",
+            hx, hy, tostring(ok)))
+    end
 
     local hpOk, hp = pcall(function() return u:GetHealth() end)
     local maxOk, maxHp = pcall(function() return u:GetMaxHealth() end)
@@ -150,12 +265,11 @@ local function stepChronoMiner(u, frame)
         return
     end
 
-    local s = minerState[id]
     if not s then
-        s = { lastEmp = -CMIN_COOLDOWN }
+        s = {}
         minerState[id] = s
     end
-    if frame - s.lastEmp < CMIN_COOLDOWN then
+    if s.lastEmpAt and (os.time() - s.lastEmpAt) < CMIN_COOLDOWN_SEC then
         return
     end
 
@@ -183,9 +297,14 @@ local function stepChronoMiner(u, frame)
         end
     end
 
-    s.lastEmp = frame
+    s.lastEmpAt = os.time()
     if hit > 0 then
         log(string.format("CMIN emergency EMP: %d target(s) disabled", hit))
+    end
+
+    local ownerName = houseName(owner)
+    if ownerName then
+        jumpMinerHome(u, ownerName, pos, frame, s)
     end
 end
 
@@ -330,6 +449,114 @@ local function stepBattleFortress(u, frame)
     end
 end
 
+-- CCOMAND: detect a chrono warp (large position jump in one tick) and apply
+-- the long recharge. The engine's own chrono delay is much shorter.
+local function stepCommando(u, frame)
+    local idOk, id = pcall(function() return u:GetId() end)
+    if not idOk or not id then
+        return
+    end
+    commandoSeen[id] = true
+
+    local posOk, pos = pcall(function() return u:GetPosition() end)
+    if not posOk or not pos then
+        return
+    end
+
+    local s = commandoState[id]
+    if not s then
+        s = { x = pos.x, y = pos.y, lastJump = -CCOMAND_RECHARGE }
+        commandoState[id] = s
+        return
+    end
+
+    local dx = pos.x - s.x
+    local dy = pos.y - s.y
+    local warped = (dx * dx + dy * dy) > 9.0 -- more than 3 cells in one tick
+    s.x = pos.x
+    s.y = pos.y
+
+    if warped and frame - s.lastJump > 60 then
+        s.lastJump = frame
+        local ok = pcall(function() return u:Disable(CCOMAND_RECHARGE) end)
+        if ok and not commandoLogged then
+            commandoLogged = true
+            log(string.format("CCOMAND chrono warp: %d frames recharge",
+                CCOMAND_RECHARGE))
+        end
+    end
+end
+
+-- DLPH (table row "Dolphin"): pressing the deploy key (D) while one or more
+-- dolphins are selected fires a sonic EMP pulse. The pulse uses the Ares
+-- EMP.Duration on [SonicPulseWH]; every enemy vehicle in range is disabled
+-- for ~6 s. Recharge: 60 s per dolphin.
+local DLPH_TYPE         = "DLPH"
+local DLPH_RANGE        = 6    -- cells
+local DLPH_COOLDOWN     = 900  -- 60 s at 15 logic frames/s
+local DLPH_EMP_WARHEAD  = "SonicPulseWH"
+local DLPH_DAMAGE       = 1
+local DLPH_EMP_FRAMES   = 90   -- must equal [SonicPulseWH] EMP.Duration
+local VK_DEPLOY         = 0x44 -- D
+local dlphState         = {}
+local dlphFirstLogged   = false
+
+local function pulseDolphins(frame)
+    local ok, pressed = pcall(function() return Input.WasKeyPressed(VK_DEPLOY) end)
+    if not ok or not pressed then
+        return
+    end
+
+    local selOk, selected = pcall(World.GetSelectedUnits)
+    if not selOk or type(selected) ~= "table" then
+        return
+    end
+
+    for _, u in ipairs(selected) do
+        local nameOk, name = pcall(function() return u:GetTypeName() end)
+        if nameOk and type(name) == "string" and name:upper() == DLPH_TYPE then
+            local idOk, id = pcall(function() return u:GetId() end)
+            if idOk and id then
+                local s = dlphState[id]
+                if not s then
+                    s = { lastUse = -DLPH_COOLDOWN }
+                    dlphState[id] = s
+                end
+                if frame - s.lastUse >= DLPH_COOLDOWN then
+                    local posOk, pos = pcall(function() return u:GetPosition() end)
+                    local ownerOk, owner = pcall(function() return u:GetOwner() end)
+                    if posOk and pos and ownerOk and owner then
+                        local targetsOk, targets = pcall(World.GetUnitsInRadius,
+                            pos.x, pos.y, DLPH_RANGE)
+                        if targetsOk and type(targets) == "table" then
+                            local hit = 0
+                            for _, t in ipairs(targets) do
+                                local kindOk, kind = pcall(function() return t:GetKind() end)
+                                local tOwnerOk, tOwner = pcall(function() return t:GetOwner() end)
+                                if kindOk and tOwnerOk and kind == "unit" and
+                                   hostile(owner, tOwner) then
+                                    local okd = pcall(function()
+                                        t:TakeDamage(DLPH_DAMAGE, DLPH_EMP_WARHEAD)
+                                    end)
+                                    if okd then
+                                        hit = hit + 1
+                                    end
+                                end
+                            end
+                            s.lastUse = frame
+                            if hit > 0 and not dlphFirstLogged then
+                                dlphFirstLogged = true
+                                log(string.format("DLPH sonic pulse: %d vehicle(s) disabled for %d frames",
+                                    hit, DLPH_EMP_FRAMES))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- Returns the tank's live target, or nil when it has none or it is out of reach.
 local function currentTarget(u)
     local target = u:GetTarget()
@@ -343,22 +570,18 @@ local function currentTarget(u)
     return target
 end
 
--- Lands one rocket of the volley. Returns false when the target is gone.
-local function fireRocket(s, frame)
+-- Lands the 120mm shell. Returns false when the target is gone.
+local function fireShell(s, frame)
     if not s.target or not s.target:IsAlive() then
         return false
     end
-    s.target:TakeDamage(ROCKET_DAMAGE, warhead)
-    s.sent = s.sent + 1
-    s.nextHit = frame + ROCKET_GAP
-    if s.sent >= ROCKETS then
-        s.phase = "wait"
-        s.t = frame
-        if not firstVolleyLogged then
-            firstVolleyLogged = true
-            log(string.format("first volley: %d rockets x %d, %s",
-                ROCKETS, ROCKET_DAMAGE, warhead))
-        end
+    s.target:TakeDamage(SHELL_DAMAGE, SHELL_WARHEAD)
+    s.phase = "wait"
+    s.t = frame
+    if not firstShellLogged then
+        firstShellLogged = true
+        log(string.format("first 120mm shell: %d damage, %s",
+            SHELL_DAMAGE, SHELL_WARHEAD))
     end
     return true
 end
@@ -371,7 +594,7 @@ local function stepTank(u, frame)
 
     local s = state[id]
     if not s then
-        s = { phase = "idle", t = 0, paintUntil = 0, target = nil, sent = 0, nextHit = 0 }
+        s = { phase = "idle", t = 0, paintUntil = 0, target = nil }
         state[id] = s
     end
 
@@ -384,7 +607,7 @@ local function stepTank(u, frame)
         return
     end
 
-    -- The rockets home on whatever the tank is pointing at right now.
+    -- The shell lands on whatever the tank is pointing at right now.
     s.target = target
 
     if s.phase == "idle" then
@@ -397,21 +620,10 @@ local function stepTank(u, frame)
         end
     elseif s.phase == "paint" then
         if frame >= s.paintUntil then
-            -- The beam has finished designating: the first rocket lands now, the
-            -- rest follow one ROCKET_GAP apart.
-            s.phase = "volley"
-            s.sent = 0
-            if not fireRocket(s, frame) then
+            -- The beam has finished designating: the 120mm shell lands now.
+            if not fireShell(s, frame) then
                 s.phase = "idle"
                 s.target = nil
-            end
-        end
-    elseif s.phase == "volley" then
-        if frame >= s.nextHit then
-            if not fireRocket(s, frame) then
-                s.phase = "idle"
-                s.target = nil
-                return
             end
         end
     elseif s.phase == "wait" then
@@ -440,15 +652,19 @@ function YurisEcho.Update(frame)
         mirageSeen = {}
         bfrtState = {}
         bfrtSeen = {}
-        firstVolleyLogged = false
+        commandoState = {}
+        commandoSeen = {}
+        dlphState = {}
+        firstShellLogged = false
         firstBurnLogged = false
         bfrtFirstHealLogged = false
         bfrtFirstBombLogged = false
+        commandoLogged = false
+        dlphFirstLogged = false
         log("new session")
     end
     lastFrame = frame
 
-    resolveWarhead()
     resolveBurnWarhead()
 
     local ok, units = pcall(World.GetUnits)
@@ -460,6 +676,7 @@ function YurisEcho.Update(frame)
     minersSeen = {}
     mirageSeen = {}
     bfrtSeen = {}
+    commandoSeen = {}
 
     for _, u in ipairs(units) do
         local nameOk, name = pcall(function() return u:GetTypeName() end)
@@ -490,6 +707,11 @@ function YurisEcho.Update(frame)
                 if not stepOk then
                     log("BFRT error: " .. tostring(err))
                 end
+            elseif upper == CCOMAND_TYPE then
+                local stepOk, err = pcall(stepCommando, u, frame)
+                if not stepOk then
+                    log("CCOMAND error: " .. tostring(err))
+                end
             end
         end
     end
@@ -508,6 +730,11 @@ function YurisEcho.Update(frame)
     for id in pairs(mirageState) do
         if not mirageSeen[id] then
             mirageState[id] = nil
+        end
+    end
+    for id in pairs(commandoState) do
+        if not commandoSeen[id] then
+            commandoState[id] = nil
         end
     end
     for id, s in pairs(bfrtState) do
@@ -536,6 +763,7 @@ function YurisEcho.Update(frame)
     end
 
     tickBurns(frame)
+    pulseDolphins(frame)
 end
 
 return YurisEcho
