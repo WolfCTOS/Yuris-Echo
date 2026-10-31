@@ -24,7 +24,8 @@ Built on Ares, Phobos and LuaAPI.
 ## Veterancy bar
 
 The LuaAPI build in this repository draws a two-stage veterancy bar below
-selected units:
+selected units. The empty dark track is visible even at 0 XP, so the scale
+does not disappear before the first kill:
 
 - first full bar → the unit becomes **veteran**;
 - second full bar → the unit becomes **elite**.
