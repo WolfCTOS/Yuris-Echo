@@ -26,7 +26,7 @@
 --   BFRT   - heals passengers (10 HP/s), defuses passenger bombs and
 --            releases ~50% of passengers when the fortress is destroyed
 --   CCOMAND- 20 s teleport recharge after every chrono warp
---   DLPH   - deploy key (D): sonic EMP pulse, 60 s recharge per dolphin
+--   DLPH   - deploy key (SHIFT): sonic EMP pulse, 60 s recharge per dolphin
 --
 -- Implemented in rulesmd.ini:
 --   GGI    - M60 rifle, Deploy fires GGILaser (40 dmg, range 8)
@@ -85,17 +85,22 @@ local CMIN_WARP_DIRS     = {
 local minerState         = {}
 local minersSeen         = {}
 
--- Mirage burn (table row "Mirage"): a hit applies 20 damage/s for 5 s.
--- LuaAPI has no damage event, so this is approximated from IsAttacking/GetTarget.
+-- Mirage burn (table row "Mirage"): a hit sets the target on fire for
+-- BURN_SECONDS seconds; 20 damage is dealt once per second while it burns.
+-- While the Mirage keeps firing the timer is refreshed, so a tank that breaks
+-- contact still burns for the full BURN_SECONDS after the Mirage stops
+-- attacking. LuaAPI has no damage event, so the "hit" is approximated from
+-- IsAttacking()/GetTarget(). Timing is wall-clock: the engine frame counter
+-- follows the render rate here, so a frame-based burn shrank to under a
+-- second of real time.
 local MGTK_TYPE          = "MGTK"
-local BURN_DAMAGE        = 20
-local BURN_TICK          = 15   -- 1 s
-local BURN_FRAMES        = 75   -- 5 s
-local BURN_REFRESH       = 60   -- re-apply cadence while the Mirage keeps firing
+local BURN_DPS           = 20   -- damage per second
+local BURN_SECONDS       = 2    -- burn duration after the last hit
+local BURN_WARHEAD       = "MirageBurnWH" -- flat 100% vs every armour type
 local mirageState        = {}
 local mirageSeen         = {}
 local burns              = {}
-local burnWarhead        = "Fire"
+local burnWarhead        = BURN_WARHEAD
 local burnWarheadChecked = false
 local firstBurnLogged    = false
 
@@ -128,10 +133,15 @@ local function resolveBurnWarhead()
         return
     end
     burnWarheadChecked = true
-    local ok, exists = pcall(function() return Engine.WarheadExists("Fire") end)
-    if not (ok and exists) then
+    local ok, exists = pcall(function() return Engine.WarheadExists(BURN_WARHEAD) end)
+    if ok and exists then
+        return
+    end
+    burnWarhead = "Fire"
+    log("WARNING: " .. BURN_WARHEAD .. " missing from rules; Mirage burn falls back to Fire")
+    local ok2, exists2 = pcall(function() return Engine.WarheadExists("Fire") end)
+    if not (ok2 and exists2) then
         burnWarhead = "AP"
-        log("WARNING: Fire warhead missing from rules; Mirage burn uses AP")
     end
 end
 
@@ -308,8 +318,11 @@ local function stepChronoMiner(u, frame)
     end
 end
 
--- MGTK: while the Mirage keeps firing, refresh a 5-second burn on its target.
--- No damage event is available, so this is driven by IsAttacking()/GetTarget().
+-- MGTK: while the Mirage keeps firing, refresh a burn on its target that
+-- keeps dealing BURN_DPS damage for BURN_SECONDS after the Mirage stops
+-- attacking. No damage event is available, so this is driven by
+-- IsAttacking()/GetTarget(). Timing is wall-clock (os.time): the engine frame
+-- counter follows the render rate, so frame-based seconds would shrink.
 local function stepMirage(u, frame)
     local idOk, id = pcall(function() return u:GetId() end)
     if not idOk or not id then
@@ -319,7 +332,7 @@ local function stepMirage(u, frame)
 
     local s = mirageState[id]
     if not s then
-        s = { targetId = nil, lastRefresh = -BURN_REFRESH }
+        s = { targetId = nil }
         mirageState[id] = s
     end
 
@@ -344,32 +357,43 @@ local function stepMirage(u, frame)
         return
     end
 
-    if s.targetId ~= tid or frame - s.lastRefresh >= BURN_REFRESH then
+    local now = os.time()
+    if s.targetId ~= tid then
         s.targetId = tid
-        s.lastRefresh = frame
         local b = burns[tid]
         if not b then
-            burns[tid] = { target = target, untilFrame = frame + BURN_FRAMES, nextTick = frame }
+            burns[tid] = { target = target, expires = now + BURN_SECONDS, nextTick = now }
         else
             b.target = target
-            b.untilFrame = frame + BURN_FRAMES
+            b.expires = now + BURN_SECONDS
+        end
+    else
+        -- The Mirage keeps firing: push the burn-out time forward.
+        local b = burns[tid]
+        if b then
+            b.target = target
+            b.expires = now + BURN_SECONDS
+        else
+            burns[tid] = { target = target, expires = now + BURN_SECONDS, nextTick = now }
         end
     end
 end
 
 -- Applies the Mirage burn ticks and drops expired/dead targets.
+-- The burn keeps ticking for BURN_SECONDS after the Mirage stops attacking.
 local function tickBurns(frame)
+    local now = os.time()
     for id, b in pairs(burns) do
         local aliveOk, alive = pcall(function() return b.target:IsAlive() end)
-        if not aliveOk or not alive or frame >= b.untilFrame then
+        if not aliveOk or not alive or now >= b.expires then
             burns[id] = nil
-        elseif frame >= b.nextTick then
-            pcall(function() b.target:TakeDamage(BURN_DAMAGE, burnWarhead) end)
-            b.nextTick = frame + BURN_TICK
+        elseif now >= b.nextTick then
+            pcall(function() b.target:TakeDamage(BURN_DPS, burnWarhead) end)
+            b.nextTick = now + 1   -- one damage tick per real second
             if not firstBurnLogged then
                 firstBurnLogged = true
-                log(string.format("Mirage burn: %d dmg / %d frames, %s",
-                    BURN_DAMAGE, BURN_FRAMES, burnWarhead))
+                log(string.format("Mirage burn: %d dmg/s for %d s, warhead %s",
+                    BURN_DPS, BURN_SECONDS, burnWarhead))
             end
         end
     end
@@ -487,9 +511,9 @@ local function stepCommando(u, frame)
     end
 end
 
--- DLPH (table row "Dolphin"): pressing the deploy key (D) while one or more
+-- DLPH (table row "Dolphin"): pressing the deploy key (SHIFT) while one or more
 -- dolphins are selected fires a sonic EMP pulse. The pulse uses the Ares
--- EMP.Duration on [SonicPulseWH]; every enemy vehicle in range is disabled
+-- EMP.Duration on [SonicPulseWH]; every enemy WATER unit in range is disabled
 -- for ~6 s. Recharge: 60 s per dolphin.
 local DLPH_TYPE         = "DLPH"
 local DLPH_RANGE        = 6    -- cells
@@ -497,7 +521,15 @@ local DLPH_COOLDOWN     = 900  -- 60 s at 15 logic frames/s
 local DLPH_EMP_WARHEAD  = "SonicPulseWH"
 local DLPH_DAMAGE       = 1
 local DLPH_EMP_FRAMES   = 90   -- must equal [SonicPulseWH] EMP.Duration
-local VK_DEPLOY         = 0x44 -- D
+local VK_DEPLOY         = 0x10 -- SHIFT
+-- Units with MovementZone=Water in rulesmd.ini: the sonic pulse only affects
+-- these naval/ship-type targets, not land units.
+local NAVAL_TYPES       = {
+    DNOB = true, LCRF = true, DEST = true, DLPH = true, AEGIS = true,
+    CARRIER = true, SAPC = true, HYD = true, SUB = true, SQD = true,
+    DRED = true, YHVR = true, BSUB = true, VLAD = true, TRUCKB = true,
+    CRUISE = true, TUG = true, CDEST = true,
+}
 local dlphState         = {}
 local dlphFirstLogged   = false
 
@@ -533,8 +565,9 @@ local function pulseDolphins(frame)
                             for _, t in ipairs(targets) do
                                 local kindOk, kind = pcall(function() return t:GetKind() end)
                                 local tOwnerOk, tOwner = pcall(function() return t:GetOwner() end)
-                                if kindOk and tOwnerOk and kind == "unit" and
-                                   hostile(owner, tOwner) then
+                                local tTypeOk, tTypeName = pcall(function() return t:GetTypeName() end)
+                                if kindOk and tOwnerOk and tTypeOk and kind == "unit" and
+                                   hostile(owner, tOwner) and NAVAL_TYPES[tTypeName:upper()] then
                                     local okd = pcall(function()
                                         t:TakeDamage(DLPH_DAMAGE, DLPH_EMP_WARHEAD)
                                     end)
@@ -546,7 +579,7 @@ local function pulseDolphins(frame)
                             s.lastUse = frame
                             if hit > 0 and not dlphFirstLogged then
                                 dlphFirstLogged = true
-                                log(string.format("DLPH sonic pulse: %d vehicle(s) disabled for %d frames",
+                                log(string.format("DLPH sonic pulse: %d water unit(s) disabled for %d frames",
                                     hit, DLPH_EMP_FRAMES))
                             end
                         end
