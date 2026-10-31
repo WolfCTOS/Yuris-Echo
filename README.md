@@ -3,7 +3,7 @@
 Gameplay mod for **Command & Conquer: Red Alert 2 — Yuri's Revenge**.
 Built on Ares, Phobos and LuaAPI.
 
-**Latest change: Added veterancy bar.**
+**Latest change: Added veterancy bar and XP popups.**
 
 ## Contents
 
@@ -31,3 +31,16 @@ selected units:
 
 Harvesters, engineers, transport planes, buildings and the listed tech
 structures are excluded. Toggle with `Engine.SetVeterancyBar(true/false)`.
+
+## XP popups
+
+When an own unit gains experience, a gold `+N XP` label appears above it.
+
+The number uses the same scale as the bar: **100 XP = one full rank**.
+`VeteranRatio=3.0` in `rulesmd.ini`, so a unit must destroy three times its
+own cost to become veteran, then another three times to become elite. For
+example, a 200-cost unit killing another 200-cost unit gets about `+33 XP`;
+three such kills promote it to veteran.
+
+Toggle with `Engine.SetVeterancyXpPopups(true/false)`.
+
