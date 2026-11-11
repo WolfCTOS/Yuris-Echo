@@ -9,7 +9,9 @@
   "entry": "smartai.lua",
   "rules": "rulesmd.ini [Countries] (имена домов) + типы зданий/юнитов; API: World.GetBuildings/GetUnits, unit:Attack/GetTarget/GetKind, house:AddCredits, unit:TakeDamage",
   "keys": "P — подробный лог в чат",
-  "conflicts": [],
+  "conflicts": [
+    "Sector — оба командуют юнитами ИИ; директор Sector перебивает приказы Smart AI на простаивающих юнитах"
+  ],
   "load": {
     "folder": "mods/Smart AI",
     "main": "main.lua",
