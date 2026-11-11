@@ -475,6 +475,7 @@ public static class L10n
         ["Сам лаунчер Yuri's Echo обновляется вместе с модом/клиентом через апдейтер CnCNet-клиента. Отдельного автообновления лаунчера в этой вкладке нет."] = "The Yuri's Echo launcher itself is updated together with the mod/client via the CnCNet client updater. There is no separate launcher auto-update in this tab.",
         ["Переключатель канала ниже меняет только канал обновлений CnCNet (updateconfig.ini). После смены канала может потребоваться перезапуск клиента/апдейтера."] = "The channel selector below only changes the CnCNet update channel (updateconfig.ini). A client/updater restart may be required after changing the channel.",
         ["Каналы Pre-release и Dev предназначены для тестирования: возможны ошибки. Сообщая о проблеме, указывайте выбранный канал."] = "Pre-release and Dev channels are intended for testing: errors are possible. When reporting an issue, mention the selected channel.",
+        ["Этот цвет уже выбран другим игроком."] = "This color is already selected by another player.",
     };
 
     private static readonly ConditionalWeakTable<DependencyObject, string> Keys = new();

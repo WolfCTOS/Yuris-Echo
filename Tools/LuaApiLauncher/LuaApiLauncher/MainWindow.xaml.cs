@@ -1791,6 +1791,8 @@ public partial class MainWindow : Window
         var colors = LauncherCore.SkirmishColors();
         var maxSlots = Math.Max(LauncherCore.MinSkirmishSlots, _currentMapMaxPlayers);
 
+        EnsureUniquePlayerColors(cfg, colors.Count);
+
         if (PlayerSlotsCount != null)
             PlayerSlotsCount.Text = $"{cfg.Players.Count} / {_currentMapMaxPlayers}";
 
@@ -1855,8 +1857,20 @@ public partial class MainWindow : Window
             color.SelectionChanged += (_, _) =>
             {
                 if (_syncing) return;
-                player.Color = Math.Max(0, color.SelectedIndex);
+                var newColor = Math.Max(0, color.SelectedIndex);
+                if (IsPlayerColorTaken(cfg, index, newColor))
+                {
+                    _syncing = true;
+                    color.SelectedIndex = Math.Clamp(player.Color, 0, Math.Max(0, colors.Count - 1));
+                    _syncing = false;
+                    if (SkirmishStatus != null)
+                        SkirmishStatus.Text = L10n.T("Этот цвет уже выбран другим игроком.");
+                    ShowToast(L10n.T("Этот цвет уже выбран другим игроком."), 2.2);
+                    return;
+                }
+                player.Color = newColor;
                 SaveSkirmishState();
+                UpdateStartButtonState();
             };
             SetCell(row, color, 3);
 
@@ -1931,7 +1945,7 @@ public partial class MainWindow : Window
             if (cfg.Players.Count >= maxSlots) return;
             var np = LauncherCore.NewPlayer(false);
             np.Name = L10n.F("ИИ {0}", cfg.Players.Count);
-            np.Color = cfg.Players.Count % colors.Count;
+            np.Color = FirstFreePlayerColor(cfg, colors.Count);
             cfg.Players.Add(np);
             SaveSkirmishState();
             BuildPlayerTable();
@@ -1939,6 +1953,45 @@ public partial class MainWindow : Window
         PlayerTablePanel.Children.Add(add);
 
         UpdateStartButtonState();
+    }
+
+
+    private static bool IsPlayerColorTaken(SkirmishConfig cfg, int playerIndex, int colorIndex)
+    {
+        for (var i = 0; i < cfg.Players.Count; i++)
+        {
+            if (i == playerIndex) continue;
+            if (cfg.Players[i].Color == colorIndex) return true;
+        }
+        return false;
+    }
+
+    private static int FirstFreePlayerColor(SkirmishConfig cfg, int colorCount)
+    {
+        if (colorCount <= 0) return 0;
+        var used = new HashSet<int>(cfg.Players.Select(p => p.Color));
+        for (var c = 0; c < colorCount; c++)
+            if (!used.Contains(c)) return c;
+        return cfg.Players.Count % colorCount;
+    }
+
+    private static void EnsureUniquePlayerColors(SkirmishConfig cfg, int colorCount)
+    {
+        if (colorCount <= 0 || cfg.Players.Count == 0) return;
+        var used = new HashSet<int>();
+        for (var i = 0; i < cfg.Players.Count; i++)
+        {
+            var p = cfg.Players[i];
+            p.Color = Math.Clamp(p.Color, 0, colorCount - 1);
+            if (used.Add(p.Color)) continue;
+            for (var c = 0; c < colorCount; c++)
+            {
+                if (used.Contains(c)) continue;
+                p.Color = c;
+                used.Add(c);
+                break;
+            }
+        }
     }
 
     /// <summary>Saves the skirmish screen state (map, options, players, tab, mode).</summary>
