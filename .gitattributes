@@ -1,0 +1,52 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# The RA2/YR engine parses rulesmd.ini / artmd.ini line by line.
+#
+# A file that mixes CRLF and bare LF leaves a dangling CR inside a value
+# ("Owner=...Alliance\r"), and that value then no longer matches a house
+# name. The stock rulesmd.ini inside cncnet.mix is pure CRLF, so every INI
+# this repo ships has to end up as pure CRLF in the working tree - on every
+# machine, regardless of the user's core.autocrlf setting.
+#
+# Rule of thumb:
+#   INI / JSON  -> CRLF (what the engine and the .NET host expect)
+#   source code -> LF   (stable diffs, no whitespace churn)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── INI read by the game engine: always CRLF in the working tree ──────────
+*.ini      text eol=crlf
+
+# ── Launcher config and .NET dependency manifests: CRLF on disk ───────────
+*.json     text eol=crlf
+
+# ── Plain-text data files the launcher rewrites at runtime ───────────────
+*.txt      text eol=crlf
+
+# ── Repository configuration files: keep LF, like the source code ─────────
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+
+# ── Source code: keep LF so diffs stay stable across platforms ───────────
+*.lua      text eol=lf
+*.cs       text eol=lf
+*.xaml     text eol=lf
+*.csproj   text eol=lf
+*.md       text eol=lf
+*.ps1      text eol=lf
+*.py       text eol=lf
+
+# Shell scripts must stay LF: a CRLF shebang breaks bash.
+*.sh       text eol=lf
+
+# ── Binary assets: never touched, never converted ────────────────────────
+*.dll      binary
+*.exe      binary
+*.pdb      binary
+*.mix      binary
+*.vxl      binary
+*.hva      binary
+*.pcx      binary
+*.wav      binary
+*.mp3      binary
+*.jpg      binary
+*.png      binary
+*.ico      binary

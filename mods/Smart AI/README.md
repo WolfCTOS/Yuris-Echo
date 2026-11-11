@@ -34,8 +34,8 @@ RA2. Smart AI работает как штаб — каждый скан он с
 Отдельного лаунчера нет. Матч-наблюдатель поднимает тестовый стенд:
 
 ```
-cd D:\Games\Red Alert 2 LuaAPI\Asolated
-python .freebuff\selfplay.py --map 4_bull_run_le --ai 3 --diff 0 --seconds 600 --keep-open
+cd <корень игры>/Asolated
+python .freebuff/selfplay.py --map 4_bull_run_le --ai 3 --diff 0 --seconds 600 --keep-open
 ```
 
 * `--diff 0` — Hard (в spawn.ini это `HandicapDifficulty`, у него обратная
@@ -53,7 +53,7 @@ python .freebuff\selfplay.py --map 4_bull_run_le --ai 3 --diff 0 --seconds 600 -
 * `LuaAPI.log` — строки `[SMARTAI]`: дома в матче, «в атаку N, цель TYPE»,
   «дом уничтожен: X», «матч решён, остался X», сводка по домам.
 * `mods/AI Telemetry/logs/match-*.jsonl` — здания, юниты, потери, группы.
-* `Asolated\.freebuff\attack_report.py` — сводка по атакам из JSONL.
+* `Asolated/.freebuff/attack_report.py` — сводка по атакам из JSONL.
 
 ## Известные ограничения
 

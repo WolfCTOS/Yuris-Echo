@@ -1,12 +1,52 @@
+# ─────────────────────────────────────────────────────────────────────────────
 # Runtime logs and local artifacts
+# ─────────────────────────────────────────────────────────────────────────────
 mods/*/logs/
+scripts/*/logs/
 *.log
+*.log.*
 injector_log.txt
 LuaAPI.crash.log
 benchmark.log
 except.txt
+syringe.log
 
+# Launcher state written at runtime into the game root
+launcher_config.json
+launcher_config_backup.json
+map_catalog_cache.json
+
+# Cross-match AI memory written next to the module (scripts/framework/persist.lua)
+scripts/framework/ai_memory.dat
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Build output of the WPF launcher (build-and-deploy.ps1 -> dotnet build)
+# ─────────────────────────────────────────────────────────────────────────────
+Tools/**/bin/
+Tools/**/obj/
+*.user
+*.suo
+.vs/
+
+# Debug symbols: regenerated on every build, never committed
+*.pdb
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Local scratch: the "Asolated" rules sandbox and its mix
+# ─────────────────────────────────────────────────────────────────────────────
+Asolated/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Backups made by hand or by tooling
+# ─────────────────────────────────────────────────────────────────────────────
+*.bak
+*.bak_*
+*.clean-*
+Backup/
+
+# ─────────────────────────────────────────────────────────────────────────────
 # OS / editor noise
+# ─────────────────────────────────────────────────────────────────────────────
 Thumbs.db
 desktop.ini
 .DS_Store

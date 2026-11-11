@@ -52,7 +52,7 @@ public static class LauncherExtras
         if (current == null) return Channels[0];
         foreach (var (name, file) in ChannelFiles)
             if (FirstUrl(Path.Combine(ChannelDir, file)) == current) return name;
-        return L10n.T("Пользовательский канал");
+        return L10n.T("Пользовательский канал");
     }
 
     /// <summary>Copies Resources\Config\UpdaterConfig_&lt;channel&gt;.ini over updateconfig.ini, as the client does.</summary>

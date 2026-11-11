@@ -8,7 +8,8 @@ a batch of rules repairs (see below).**
 
 ## Contents
 
-- `Ares.dll`, `Phobos.dll`, `LuaAPI.dll`, `Syringe.exe`, `LMM.exe`
+- `Ares.dll`, `Phobos.dll`, `LuaAPI.dll`, `Syringe.exe` — the engine stack
+- `Yuri's Echo.exe`, `YurisEcho.dll` — the launcher (source in `Tools\`)
 - `rulesmd.ini`, `artmd.ini` — Yuri's Echo rules and art
 - `mods\` - Yuri's Echo, Smart AI, AI Telemetry, AI Ignore, Humvee,
   LTNK EMP nerf
@@ -19,9 +20,13 @@ a batch of rules repairs (see below).**
 
 1. Copy everything in this repository into the Yuri's Revenge 1.001 game
    folder (next to `gamemd.exe`).
-2. Run `LMM.exe`.
-3. Press **Launch Game**. LMM starts `gamemd.exe` through `Syringe.exe`
-   with `Ares.dll` and `Phobos.dll`, then injects `LuaAPI.dll`.
+2. Run `Yuri's Echo.exe`.
+3. Press **Launch Game**. The launcher starts `gamemd.exe` through
+   `Syringe.exe` with `Ares.dll` and `Phobos.dll`, then injects
+   `LuaAPI.dll` and applies `mods\active_mods.txt`.
+
+`LMM.exe` is not required: the launcher applies `active_mods.txt` and starts
+the game with LuaAPI on its own.
 
 ## Faction doctrines and rules repairs
 
