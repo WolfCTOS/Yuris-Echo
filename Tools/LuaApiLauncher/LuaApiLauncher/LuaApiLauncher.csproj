@@ -1,0 +1,54 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <!-- The assembly name must stay free of characters that need URI escaping:
+         WPF bakes it into the XAML resource URI ("/NAME;component/x.xaml") and an
+         apostrophe or a space there breaks the lookup at startup. The shipped
+         file is still named "Yuri's Echo.exe" - see the publish step. -->
+    <AssemblyName>YurisEcho</AssemblyName>
+    <RootNamespace>LuaApiLauncher</RootNamespace>
+    <ApplicationIcon>Resources\YurisEcho.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Used as the Win32 icon of the executable, not as a WPF resource. -->
+    <Resource Remove="Resources\YurisEcho.ico" />
+    <None Include="Resources\YurisEcho.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Short UI sounds embedded in the assembly (no files to deploy). -->
+    <Resource Include="Resources\Sfx\*.wav" />
+  </ItemGroup>
+
+  <!--
+    The shipped executable is called "Yuri's Echo.exe". The assembly name itself
+    has to stay URI-safe (WPF bakes it into the XAML resource URI), and the
+    host resolves <app>.runtimeconfig.json / <app>.deps.json from the managed
+    dll name - so only the .exe is renamed here.
+  -->
+  <Target Name="BrandLauncher" AfterTargets="Build">
+    <PropertyGroup>
+      <BrandedExe>$(TargetDir)Yuri's Echo.exe</BrandedExe>
+      <GameRoot>$(MSBuildProjectDirectory)\..\..\..\</GameRoot>
+    </PropertyGroup>
+    <Move SourceFiles="$(TargetDir)$(TargetName).exe" DestinationFiles="$(BrandedExe)" />
+    <Message Importance="high" Text="Branded launcher: $(BrandedExe)" />
+
+    <!-- Copy all launcher build artifacts to the game root and log hashes to avoid Debug/Release mix-ups. -->
+    <ItemGroup>
+      <LauncherArtifacts Include="$(BrandedExe)" />
+      <LauncherArtifacts Include="$(TargetDir)$(AssemblyName).dll" />
+      <LauncherArtifacts Include="$(TargetDir)$(AssemblyName).pdb" />
+      <LauncherArtifacts Include="$(TargetDir)$(AssemblyName).deps.json" />
+      <LauncherArtifacts Include="$(TargetDir)$(AssemblyName).runtimeconfig.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(LauncherArtifacts)" DestinationFolder="$(GameRoot)" SkipUnchangedFiles="false" />
+    <Message Importance="high" Text="Copied launcher artifacts ($(Configuration)) to $(GameRoot)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$root='$(GameRoot)'; $cfg='$(Configuration)'; $files=@('Yuri''s Echo.exe','$(AssemblyName).dll','$(AssemblyName).pdb','$(AssemblyName).deps.json','$(AssemblyName).runtimeconfig.json'); Write-Host ('Launcher copy [{0}] -&gt; {1}' -f $cfg,$root); foreach($f in $files){ $p=Join-Path $root $f; if(Test-Path $p){ $sha=[System.Security.Cryptography.SHA256]::Create(); $fs=[System.IO.File]::OpenRead($p); try{ $h=([System.BitConverter]::ToString($sha.ComputeHash($fs)).Replace('-','')) } finally { $fs.Dispose(); $sha.Dispose() }; $i=Get-Item $p; Write-Host ('{0} | {1} | {2} | {3}' -f $f,$i.Length,$i.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'),$h) } else { Write-Host ('{0} | MISSING' -f $f) } }&quot;" />
+  </Target>
+</Project>

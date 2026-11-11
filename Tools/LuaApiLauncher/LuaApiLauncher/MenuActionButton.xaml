@@ -1,0 +1,31 @@
+﻿<UserControl x:Class="LuaApiLauncher.MenuActionButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LuaApiLauncher"
+             Width="312" Height="36" Focusable="True" Cursor="Hand"
+             MouseEnter="Root_MouseEnter" MouseLeave="Root_MouseLeave"
+             MouseLeftButtonDown="Root_MouseDown" MouseLeftButtonUp="Root_MouseUp"
+             GotKeyboardFocus="Root_GotFocus" LostKeyboardFocus="Root_LostFocus">
+    <Grid>
+        <Path x:Name="Bg" StrokeThickness="1"/>
+        <Rectangle x:Name="HoverBar" Width="3" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                   Margin="1,4,0,4" Visibility="Collapsed"/>
+        <Grid Margin="0,0,0,0">
+            <!-- Hidden bold label reserves width so SemiBold selected state doesn't shift layout -->
+            <TextBlock x:Name="LabelMeasure" VerticalAlignment="Center" HorizontalAlignment="Left"
+                       Margin="14,0,54,0" FontFamily="{x:Static local:Theme.UiFont}"
+                       FontSize="13" FontWeight="SemiBold" Visibility="Hidden" TextTrimming="CharacterEllipsis"/>
+            <TextBlock x:Name="Label" VerticalAlignment="Center" HorizontalAlignment="Left"
+                       Margin="14,0,54,0" FontFamily="{x:Static local:Theme.UiFont}"
+                       FontSize="13" TextTrimming="CharacterEllipsis"/>
+            <Rectangle x:Name="Divider" Width="1" Height="18" HorizontalAlignment="Right"
+                       Margin="0,0,40,0" VerticalAlignment="Center"/>
+            <Path x:Name="Diamond" Width="8" Height="8" HorizontalAlignment="Right"
+                  Margin="0,0,16,0" VerticalAlignment="Center" StrokeThickness="1"
+                  Data="M 4,0 L 8,4 L 4,8 L 0,4 Z"/>
+        </Grid>
+        <Rectangle x:Name="BottomLine" Width="24" Height="2" HorizontalAlignment="Left"
+                   VerticalAlignment="Bottom" Margin="12,0,0,0"/>
+        <Path x:Name="FocusBorder" StrokeThickness="1.5" Visibility="Collapsed" IsHitTestVisible="False"/>
+    </Grid>
+</UserControl>
