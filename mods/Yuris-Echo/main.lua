@@ -2,11 +2,17 @@
 --
 -- AM2 (table row "AM2"):
 --   1. The engine fires [AM2Paint]: a red laser designator (Damage=55,
---      IsLaser=true, LaserDuration=45), so every shot is a visible paint.
---   2. PAINT_FRAMES (45) after the beam a 120mm shell lands for 105 AP.
---      Laser 55 + shell 105 = 160 per ROF=70, about 80% of the Apocalypse's
---      2 x 100 volley. Both weapons hit the same target one after another.
---   3. The cycle repeats every ROF_FRAMES (70) frames, the same period as
+--      IsLaser=true, LaserDuration=45, Warhead=SA), so every shot is a visible
+--      paint and the beam is the anti-infantry half of the tank.
+--   2. PAINT_FRAMES (45) after the beam a 120mm shell lands for 140 ApocAP.
+--      ApocAP: 100% vs concrete/steel/heavy armour, 25% vs flesh.
+--      Per hit: heavy armour 140 + 55*25% = ~154 vs the Apocalypse's 200 (~77%),
+--      concrete 140 + 55*75% = ~181 vs 200 (~90%), flesh 140*25% + 55 = ~90
+--      vs the Apocalypse's 50 (~180%, the laser is the anti-infantry half).
+--      Both weapons hit the same target one after another.
+--   3. Doctrine: the beam's projectile is [AM2BeamP] with AA=no - like the
+--      Apocalypse, the AM2 does not shoot at aircraft at all.
+--   4. The cycle repeats every ROF_FRAMES (70) frames, the same period as
 --      [AM2Paint] ROF, so the shell never drifts away from the beam.
 --
 -- Engine limit: this build cannot spawn projectiles from Lua (FireProjectile
@@ -31,11 +37,11 @@
 -- Implemented in rulesmd.ini:
 --   GGI    - M60 rifle, Deploy fires GGILaser (40 dmg, range 8)
 --   JUMPJET- ground-only 2-rocket volley, elite uses the same weapon
---   GHOST  - Sensors 7 (SEAL)
+--   GHOST  - Navy SEAL (rules tag GHOST, Name=SEAL): Sensors 7, DetectDisguise
 --   SPY    - cloak while idle, Speed 5
---   CCOMAND- ChronoMP5AT anti-tank weapon
---   CLEG   - psionic immunity (no Sensors)
---   TANYA  - Sensors 9, Speed 9, Assaulter
+--   CCOMAND- ChronoMP5AT anti-tank weapon, long teleport recharge
+--   CLEG   - no psionic immunity (per Alliance spec), no Sensors
+--   TANY   - Sensors 9, Speed 9, Assaulter (rules tag TANY per spec)
 --   SREF   - MinimumRange 1, native ShrapnelWeapon chain (3 x 80)
 --   MGTK   - Sensors 7
 --   ROBO   - Sensors 9
@@ -49,8 +55,8 @@ local YurisEcho = {}
 
 local UNIT_TYPE      = "AM2"
 local PAINT_FRAMES   = 45    -- 3 s at 15 logic frames/s; must equal LaserDuration
-local SHELL_DAMAGE   = 105   -- 105 + 55 laser = 160 = 20% under APOC's 2 x 100
-local SHELL_WARHEAD  = "AP"  -- 120mm anti-armour shell
+local SHELL_DAMAGE   = 140   -- 140 (ApocAP) + 55 laser = 195 vs heavy armour -> ~82% of APOC's 2 x 100
+local SHELL_WARHEAD  = "ApocAP"  -- 120mm shell: 100% vs concrete/steel/heavy -> "hits tech harder than AP"
 local ROF_FRAMES     = 70    -- must equal [AM2Paint] ROF
 local AIM_FRAMES     = 8     -- grace frames for the turret to turn before painting
 local MAX_RANGE      = 6.5   -- cells; paint is dropped if the target gets away
