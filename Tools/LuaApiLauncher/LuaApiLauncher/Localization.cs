@@ -466,6 +466,10 @@ public static class L10n
         ["Неверный формат данных в файле настроек."] = "Invalid data format in the settings file.",
         ["Не найден необходимый файл или папка."] = "A required file or folder was not found.",
         ["Произошла ошибка. Подробности записаны в журнал лаунчера."] = "An error occurred. Details were written to the launcher log.",
+        ["Установка"] = "Installation",
+        ["Лаунчер, похоже, запущен не из папки игры. Не найдены: {0}. Поместите лаунчер в корень игры."] = "The launcher does not appear to be running from the game folder. Missing: {0}. Place the launcher in the game root.",
+        ["Запуск"] = "Launch",
+        ["Игра уже запущена. Закройте текущий процесс игры перед новым запуском."] = "The game is already running. Close the current game process before starting a new one.",
     };
 
     private static readonly ConditionalWeakTable<DependencyObject, string> Keys = new();

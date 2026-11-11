@@ -88,7 +88,9 @@ public partial class MainWindow : Window
             L10n.Apply(this);
             ApplyClientWindowMode();
             if (SkirmishBuildMarker != null) SkirmishBuildMarker.Text = marker;
+            if (MainBuildMarker != null) MainBuildMarker.Text = marker;
             ShowMain();
+            WarnIfNotInGameRoot();
         }
         catch (Exception ex)
         {
@@ -162,6 +164,22 @@ public partial class MainWindow : Window
         Left = wa.Left + (wa.Width - Width) / 2;
         Top = wa.Top + (wa.Height - Height) / 2;
         WindowStartupLocation = WindowStartupLocation.Manual;
+    }
+
+    private void WarnIfNotInGameRoot()
+    {
+        try
+        {
+            var (ok, missing) = LauncherCore.CheckGameRoot();
+            if (!ok)
+            {
+                ShowNotice(L10n.T("Установка"), L10n.F("Лаунчер, похоже, запущен не из папки игры. Не найдены: {0}. Поместите лаунчер в корень игры.", missing), showOpenLog: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            LauncherLog.Error("Game root check failed", ex);
+        }
     }
 
     private void ReloadState()
@@ -307,7 +325,7 @@ public partial class MainWindow : Window
             _cfg.Skirmish.SelectedMode = _currentMapMode;
             var all = CmbMapMode?.Items.OfType<MapModeItem>().FirstOrDefault(i => i.Key == MapCatalog.AllMapsMode);
             _syncing = true;
-            if (all != null) CmbMapMode.SelectedItem = all;
+            if (all != null && CmbMapMode != null) CmbMapMode.SelectedItem = all;
             _syncing = false;
             RefreshMaps();
         }
@@ -884,6 +902,12 @@ public partial class MainWindow : Window
             if (MissionList.SelectedItem is not CampaignMission mission)
             {
                 CompanyStatus.Text = L10n.T("Выберите миссию.");
+                return;
+            }
+
+            if (LauncherCore.IsGameProcessRunning(_cfg))
+            {
+                ShowNotice(L10n.T("Запуск"), L10n.T("Игра уже запущена. Закройте текущий процесс игры перед новым запуском."));
                 return;
             }
 
@@ -1949,7 +1973,7 @@ public partial class MainWindow : Window
     private void MapSearchAllLink_Click(object sender, MouseButtonEventArgs e)
     {
         var all = CmbMapMode?.Items.OfType<MapModeItem>().FirstOrDefault(i => i.Key == MapCatalog.AllMapsMode);
-        if (all != null) CmbMapMode.SelectedItem = all; // triggers mode change + refresh
+        if (all != null && CmbMapMode != null) CmbMapMode.SelectedItem = all; // triggers mode change + refresh
     }
 
     private void CmbMapMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2047,6 +2071,11 @@ public partial class MainWindow : Window
     {
         UpdateStartButtonState();
         if (GetStartBlockReason() != null) return;
+        if (LauncherCore.IsGameProcessRunning(_cfg))
+        {
+            ShowNotice(L10n.T("Запуск"), L10n.T("Игра уже запущена. Закройте текущий процесс игры перед новым запуском."));
+            return;
+        }
         LaunchGameSafe();
     }
 

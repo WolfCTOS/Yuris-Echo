@@ -1069,6 +1069,37 @@ public static class LauncherCore
     public static string GameProcessName(LauncherConfig cfg) =>
         Path.GetFileNameWithoutExtension(Exists(cfg.Gamemd) ? cfg.Gamemd : "gamemd.exe");
 
+    public static bool IsProcessRunning(string processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return false;
+        try { return System.Diagnostics.Process.GetProcessesByName(processName).Length > 0; }
+        catch { return false; }
+    }
+
+    public static bool IsGameProcessRunning(LauncherConfig cfg)
+    {
+        // Check common game executables; running any of them means we should not start another instance.
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            GameProcessName(cfg),
+            "gamemd",
+            "gamemd-spawn",
+        };
+        foreach (var n in names)
+            if (IsProcessRunning(n)) return true;
+        return false;
+    }
+
+    public static (bool ok, string message) CheckGameRoot()
+    {
+        var missing = new List<string>();
+        if (!Exists("gamemd.exe") && !Exists("gamemd-spawn.exe")) missing.Add("gamemd.exe");
+        if (!Directory.Exists(Path.Combine(Root, "Resources"))) missing.Add("Resources\\");
+        if (!Directory.Exists(Path.Combine(Root, "Client"))) missing.Add("Client\\");
+        if (missing.Count == 0) return (true, "");
+        return (false, string.Join(", ", missing));
+    }
+
     public static List<KeyValuePair<string, string>> ScanRenderers()
     {
         var ini = IniFile.Load(Path.Combine(Root, "Resources", "Renderers.ini"));

@@ -437,6 +437,9 @@
                         </StackPanel>
                     </Grid>
                 </Border>
+                <TextBlock x:Name="MainBuildMarker" Text="" FontSize="9" Foreground="#5B616E"
+                           HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14,0,0,10"
+                           IsHitTestVisible="False"/>
             </Grid>
 
             <!-- ======================= CAMPAIGN ======================= -->
