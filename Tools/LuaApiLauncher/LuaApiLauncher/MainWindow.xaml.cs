@@ -660,9 +660,83 @@ public partial class MainWindow : Window
         ShowOnly(StatsView);
         ReloadState();
         _maps = LauncherCore.ScanMaps();
-        StatsText.Text = LauncherCore.BuildStats(_cfg, _mods, _active, _maps);
+        BuildStatsCards();
         UpdateLayout();
         L10n.Apply(this);
+    }
+
+    private void AddStatCard(string title, IEnumerable<(string label, string value)> rows)
+    {
+        if (StatsCards == null) return;
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x11, 0x15, 0x1D)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x34, 0x3A, 0x47)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(14),
+            Margin = new Thickness(0, 0, 12, 12),
+            MinWidth = 300,
+            MaxWidth = 520
+        };
+        var stack = new StackPanel();
+        stack.Children.Add(new TextBlock { Text = title, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0xB8, 0xBD, 0xC8)), Margin = new Thickness(0,0,0,10) });
+        foreach (var (label, value) in rows)
+        {
+            var row = new Grid { Margin = new Thickness(0,0,0,6) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var l = new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(0x9A, 0xA0, 0xAC)), FontSize = 12, TextWrapping = TextWrapping.Wrap };
+            var v = new TextBlock { Text = value, Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xE8, 0xEC)), FontSize = 12, TextWrapping = TextWrapping.Wrap };
+            Grid.SetColumn(v, 1);
+            row.Children.Add(l); row.Children.Add(v);
+            stack.Children.Add(row);
+        }
+        border.Child = stack;
+        StatsCards.Children.Add(border);
+    }
+
+    private void BuildStatsCards()
+    {
+        if (StatsCards == null) return;
+        StatsCards.Children.Clear();
+        string YesNo(bool value) => L10n.T(value ? "есть" : "нет");
+        var luaLog = System.IO.Path.Combine(LauncherCore.Root, "LuaAPI.log");
+
+        AddStatCard(L10n.T("УСТАНОВКА"), new (string,string)[] {
+            (L10n.T("путь"), LauncherCore.Root),
+            ("gamemd", YesNo(LauncherCore.Exists(_cfg.Gamemd))),
+            ("Syringe", YesNo(LauncherCore.Exists(_cfg.Syringe))),
+            ("Ares", YesNo(LauncherCore.Exists("Ares.dll"))),
+            ("Phobos", YesNo(LauncherCore.Exists("Phobos.dll"))),
+            ("LuaAPI", YesNo(LauncherCore.Exists("LuaAPI.dll"))),
+        });
+
+        var modList = _mods.Count == 0 ? L10n.T("Модов нет.") : string.Join(", ", _mods.Select(m => m.Name + (_active.Contains(m.Id) ? "*" : "")));
+        AddStatCard(L10n.T("МОДЫ"), new (string,string)[] {
+            (L10n.T("найдено"), _mods.Count.ToString()),
+            (L10n.T("активно"), _active.Count.ToString()),
+            (L10n.T("файлов"), $"lua {_mods.Sum(m => m.LuaFiles.Count)}, json {_mods.Sum(m => m.JsonFiles.Count)}"),
+            (L10n.T("список"), modList),
+        });
+
+        AddStatCard(L10n.T("КАРТЫ"), new (string,string)[] {
+            (L10n.T("найдено"), _maps.Count.ToString()),
+        });
+
+        AddStatCard("CNCNET", new (string,string)[] {
+            ("online", "N/A"),
+            (L10n.T("статус"), L10n.T("разработка мультиплеера ещё не начата")),
+        });
+
+        var luaRows = new System.Collections.Generic.List<(string,string)>();
+        if (System.IO.File.Exists(luaLog))
+        {
+            var fi = new System.IO.FileInfo(luaLog);
+            luaRows.Add((L10n.T("изменён"), fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")));
+            luaRows.Add((L10n.T("размер"), LauncherCore.FormatSize(fi.Length)));
+        }
+        else luaRows.Add((L10n.T("статус"), L10n.T("нет файла")));
+        AddStatCard("LUAAPI.LOG", luaRows);
     }
 
     private void UpdateMainStatus()
@@ -2214,7 +2288,7 @@ public partial class MainWindow : Window
 
         var body = L10n.T("Настройки игры: RA2MD.INI\nПараметры лаунчера: launcher_config.json") + channelNote;
         if (notes.Count > 0) body += "\n" + string.Join("\n", notes);
-        ShowNotice(L10n.T("СОХРАНЕНО"), body);
+        ShowToast(body);
     }
 
     private static void ResolveResolution(ComboBox box, IReadOnlyList<DisplayInfo.Resolution> supported,
@@ -2296,6 +2370,27 @@ public partial class MainWindow : Window
         s.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
     // ---------------------------------------------------------------- notice
+
+    private System.Windows.Threading.DispatcherTimer? _toastTimer;
+
+    private void ShowToast(string message, double seconds = 2.8)
+    {
+        try
+        {
+            if (ToastHost == null || ToastText == null) { ShowNotice(L10n.T("Уведомление"), message); return; }
+            ToastText.Text = message;
+            ToastHost.Visibility = Visibility.Visible;
+            _toastTimer?.Stop();
+            _toastTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+            _toastTimer.Tick += (_, _) => { _toastTimer?.Stop(); if (ToastHost != null) ToastHost.Visibility = Visibility.Collapsed; };
+            _toastTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            LauncherLog.Error("Toast failed", ex);
+        }
+    }
+
 
     private void ShowNotice(string title, string body, bool showOpenLog = false, Exception? ex = null)
     {

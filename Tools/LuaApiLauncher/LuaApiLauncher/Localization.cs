@@ -470,6 +470,11 @@ public static class L10n
         ["Лаунчер, похоже, запущен не из папки игры. Не найдены: {0}. Поместите лаунчер в корень игры."] = "The launcher does not appear to be running from the game folder. Missing: {0}. Place the launcher in the game root.",
         ["Запуск"] = "Launch",
         ["Игра уже запущена. Закройте текущий процесс игры перед новым запуском."] = "The game is already running. Close the current game process before starting a new one.",
+        ["Уведомление"] = "Notice",
+        ["Обновление лаунчера и клиента"] = "Launcher and client updates",
+        ["Сам лаунчер Yuri's Echo обновляется вместе с модом/клиентом через апдейтер CnCNet-клиента. Отдельного автообновления лаунчера в этой вкладке нет."] = "The Yuri's Echo launcher itself is updated together with the mod/client via the CnCNet client updater. There is no separate launcher auto-update in this tab.",
+        ["Переключатель канала ниже меняет только канал обновлений CnCNet (updateconfig.ini). После смены канала может потребоваться перезапуск клиента/апдейтера."] = "The channel selector below only changes the CnCNet update channel (updateconfig.ini). A client/updater restart may be required after changing the channel.",
+        ["Каналы Pre-release и Dev предназначены для тестирования: возможны ошибки. Сообщая о проблеме, указывайте выбранный канал."] = "Pre-release and Dev channels are intended for testing: errors are possible. When reporting an issue, mention the selected channel.",
     };
 
     private static readonly ConditionalWeakTable<DependencyObject, string> Keys = new();

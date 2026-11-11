@@ -374,7 +374,7 @@
         <Grid x:Name="TitleBar" Grid.Row="0" Background="#CC0B0F14" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Rectangle Height="1" VerticalAlignment="Bottom" Fill="#343A47" Opacity="0.6"/>
             <TextBlock Text="YURI'S ECHO" VerticalAlignment="Center" Margin="12,0,0,0"
-                       Foreground="#7C8290" FontSize="11"/>
+                       Foreground="#9AA0AC" FontSize="11"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="MinBtn" Content="&#x2013;" Width="46" Height="32" Click="MinBtn_Click" Style="{x:Null}"
                         Background="Transparent" Foreground="#C9CCD3" BorderThickness="0" FontSize="14" Cursor="Hand"/>
@@ -395,7 +395,7 @@
                                FontSize="14" Foreground="#E6E8EC"/>
                     <Rectangle Canvas.Left="62" Canvas.Top="154" Width="260" Height="1" Fill="#E6E8EC"/>
                     <TextBlock Canvas.Left="62" Canvas.Top="176" Text="CAMPAIGN MOD / LUAAPI ENGINE" FontSize="11"
-                               Foreground="#7C8290"/>
+                               Foreground="#9AA0AC"/>
                 </Canvas>
 
                 <Border Width="372" Margin="0,40,40,40" HorizontalAlignment="Right"
@@ -409,7 +409,7 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0">
-                            <TextBlock Text="YURI'S ECHO" FontSize="11" Foreground="#7C8290"/>
+                            <TextBlock Text="YURI'S ECHO" FontSize="11" Foreground="#9AA0AC"/>
                             <TextBlock Text="ГЛАВНОЕ МЕНЮ" FontSize="26" Foreground="#C9CCD3"/>
                             <Rectangle Width="96" Height="2" Fill="#E6E8EC" HorizontalAlignment="Left" Margin="0,4,0,0"/>
                         </StackPanel>
@@ -428,16 +428,16 @@
                         <StackPanel Grid.Row="3">
                             <Rectangle Height="1" Fill="#343A47" Margin="0,0,0,8" Opacity="0.7"/>
                             <Grid>
-                                <TextBlock Text="CnCNet online" FontSize="12" Foreground="#7C8290"/>
+                                <TextBlock Text="CnCNet online" FontSize="12" Foreground="#9AA0AC"/>
                                 <TextBlock x:Name="OnlineStatus" Text="N/A" FontSize="12" Foreground="#C9CCD3"
                                            HorizontalAlignment="Right"/>
                             </Grid>
-                            <TextBlock x:Name="StatusLine" FontSize="11" Foreground="#7C8290" TextWrapping="Wrap"
+                            <TextBlock x:Name="StatusLine" FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap"
                                        Margin="0,6,0,0"/>
                         </StackPanel>
                     </Grid>
                 </Border>
-                <TextBlock x:Name="MainBuildMarker" Text="" FontSize="9" Foreground="#5B616E"
+                <TextBlock x:Name="MainBuildMarker" Text="" FontSize="9" Foreground="#8B919D"
                            HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14,0,0,10"
                            IsHitTestVisible="False"/>
             </Grid>
@@ -475,7 +475,7 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Text="МИССИИ" FontSize="11" Foreground="#7C8290" Margin="4,0,0,6"/>
+                            <TextBlock Grid.Row="0" Text="МИССИИ" FontSize="11" Foreground="#9AA0AC" Margin="4,0,0,6"/>
                             <StackPanel x:Name="CampaignSideTabs" Grid.Row="1" Orientation="Horizontal"
                                         Margin="4,0,0,10"/>
 
@@ -498,7 +498,7 @@
                                 <ListBox.Resources>
                                     <DataTemplate DataType="{x:Type local:CampaignHeader}">
                                         <StackPanel Margin="8,12,8,5" IsHitTestVisible="False">
-                                            <TextBlock Text="{Binding Title}" Foreground="#7C8290" FontSize="10"
+                                            <TextBlock Text="{Binding Title}" Foreground="#9AA0AC" FontSize="10"
                                                        FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                             <Rectangle Height="1" Fill="#343A47" Margin="0,5,0,0"/>
                                         </StackPanel>
@@ -517,11 +517,11 @@
                             BorderBrush="#343A47" BorderThickness="1" VerticalAlignment="Top"
                             Visibility="Collapsed">
                         <StackPanel Margin="16,12,16,14">
-                            <TextBlock Text="ОПИСАНИЕ МИССИИ" FontSize="11" Foreground="#7C8290" Margin="4,0,0,8"/>
+                            <TextBlock Text="ОПИСАНИЕ МИССИИ" FontSize="11" Foreground="#9AA0AC" Margin="4,0,0,8"/>
 
                             <StackPanel Margin="4,0,4,0">
                                 <TextBlock x:Name="MissionTitle" FontSize="18" Foreground="#E6E8EC" TextWrapping="Wrap"/>
-                                <TextBlock x:Name="MissionMeta" FontSize="11" Foreground="#7C8290" TextWrapping="Wrap"
+                                <TextBlock x:Name="MissionMeta" FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap"
                                            Margin="0,4,0,0"/>
 
                                 <Rectangle x:Name="MissionDivider" Height="1" Fill="#343A47" Margin="0,12,0,12"/>
@@ -544,7 +544,7 @@
                     </Grid.ColumnDefinitions>
                     <Button Content="ЗАПУСТИТЬ МИССИЮ" Grid.Column="0" Width="200" Height="40"
                         Style="{StaticResource SmallButton}" Click="BtnStartCampaign_Click" Foreground="#E6E8EC"/>
-                    <TextBlock Grid.Column="1" x:Name="CompanyStatus" FontSize="12" Foreground="#7C8290"
+                    <TextBlock Grid.Column="1" x:Name="CompanyStatus" FontSize="12" Foreground="#9AA0AC"
                                VerticalAlignment="Center" TextWrapping="Wrap" Margin="16,0"/>
                     <Button Grid.Column="2" Content="НАЗАД" Width="120" Style="{StaticResource SmallButton}"
                             Click="BtnCompanyBack_Click"/>
@@ -579,9 +579,9 @@
                     <!-- ==================== LEFT: maps ==================== -->
                     <Border Grid.Column="0" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
                         <DockPanel Margin="12">
-                            <TextBlock DockPanel.Dock="Top" Text="КАРТЫ" FontSize="11" Foreground="#7C8290" Margin="4,0,0,8"/>
+                            <TextBlock DockPanel.Dock="Top" Text="КАРТЫ" FontSize="11" Foreground="#9AA0AC" Margin="4,0,0,8"/>
 
-                            <TextBlock DockPanel.Dock="Top" Text="РЕЖИМ ИГРЫ" FontSize="10" Foreground="#7C8290" Margin="4,0,0,4"/>
+                            <TextBlock DockPanel.Dock="Top" Text="РЕЖИМ ИГРЫ" FontSize="10" Foreground="#9AA0AC" Margin="4,0,0,4"/>
                             <ComboBox x:Name="CmbMapMode" DockPanel.Dock="Top" Height="26" FontSize="11" Margin="0,0,0,8"
                                       SelectionChanged="CmbMapMode_SelectionChanged"/>
 
@@ -590,7 +590,7 @@
                                          FontSize="12" Foreground="#C9CCD3" Background="#0B0F14"
                                          BorderBrush="#343A47" BorderThickness="1" CaretBrush="#E6E8EC"
                                          TextChanged="MapSearchBox_TextChanged"/>
-                                <TextBlock x:Name="MapSearchHint" Text="Search maps..." FontSize="11" Foreground="#5B616E"
+                                <TextBlock x:Name="MapSearchHint" Text="Search maps..." FontSize="11" Foreground="#8B919D"
                                            Margin="10,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
                             </Grid>
 
@@ -601,14 +601,14 @@
                                        Foreground="#E06B6B" Margin="2,6,2,0" TextWrapping="Wrap"
                                        Visibility="Collapsed"/>
 
-                            <TextBlock DockPanel.Dock="Bottom" x:Name="SkirmishStatus" FontSize="10" Foreground="#7C8290"
+                            <TextBlock DockPanel.Dock="Bottom" x:Name="SkirmishStatus" FontSize="10" Foreground="#9AA0AC"
                                        VerticalAlignment="Center" Margin="2,8,2,8" TextWrapping="Wrap"/>
 
                             <!-- search moved to top under game mode -->
 
 
                             <StackPanel x:Name="MapSearchEmpty" DockPanel.Dock="Top" Margin="4,6,4,2" Visibility="Collapsed">
-                                <TextBlock x:Name="MapSearchEmptyText" FontSize="11" Foreground="#7C8290" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="MapSearchEmptyText" FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap"/>
                                 <TextBlock x:Name="MapSearchAllLink" FontSize="11" Foreground="#C9CCD3"
                                            TextDecorations="Underline" Cursor="Hand" Margin="0,2,0,0"
                                            MouseLeftButtonUp="MapSearchAllLink_Click"/>
@@ -632,8 +632,8 @@
                         <Border Grid.Row="0" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
                             <DockPanel Margin="12">
                                 <Grid DockPanel.Dock="Top" Margin="4,0,0,6">
-                                    <TextBlock Text="ИГРОКИ" FontSize="11" Foreground="#7C8290"/>
-                                    <TextBlock x:Name="PlayerSlotsCount" FontSize="10" Foreground="#5B616E"
+                                    <TextBlock Text="ИГРОКИ" FontSize="11" Foreground="#9AA0AC"/>
+                                    <TextBlock x:Name="PlayerSlotsCount" FontSize="10" Foreground="#8B919D"
                                                HorizontalAlignment="Right"/>
                                 </Grid>
                                 <StackPanel x:Name="PlayerTablePanel"/>
@@ -652,7 +652,7 @@
                                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                                     <Grid>
                                         <Image x:Name="MapPreview" Stretch="Uniform" Margin="2"/>
-                                        <TextBlock x:Name="MapPreviewEmpty" Text="Превью нет" FontSize="12" Foreground="#5B616E"
+                                        <TextBlock x:Name="MapPreviewEmpty" Text="Превью нет" FontSize="12" Foreground="#8B919D"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>
@@ -660,9 +660,9 @@
                                 <StackPanel Grid.Row="1" Margin="2,8,2,0">
                                     <TextBlock x:Name="MapName" FontSize="13" Foreground="#C9CCD3"
                                                TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock x:Name="MapPath" FontSize="10" Foreground="#7C8290"
+                                    <TextBlock x:Name="MapPath" FontSize="10" Foreground="#9AA0AC"
                                                TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                                    <TextBlock x:Name="MapSize" FontSize="10" Foreground="#5B616E"
+                                    <TextBlock x:Name="MapSize" FontSize="10" Foreground="#8B919D"
                                                Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Grid>
@@ -701,10 +701,10 @@
                                                          BorderBrush="#343A47" BorderThickness="1" CaretBrush="#E6E8EC"
                                                          TextChanged="ModSearchBox_TextChanged"/>
                                                 <TextBlock x:Name="ModSearchHint" Text="ПОИСК МОДА..." FontSize="11"
-                                                           Foreground="#5B616E" Margin="10,0,0,0"
+                                                           Foreground="#8B919D" Margin="10,0,0,0"
                                                            VerticalAlignment="Center" IsHitTestVisible="False"/>
                                             </Grid>
-                                            <TextBlock Text="НАБОР МОДОВ" FontSize="10" Foreground="#7C8290" Margin="0,8,0,4"/>
+                                            <TextBlock Text="НАБОР МОДОВ" FontSize="10" Foreground="#9AA0AC" Margin="0,8,0,4"/>
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -739,7 +739,7 @@
                                                 <StackPanel>
                                                     <TextBlock x:Name="ModDetailsName" FontSize="14" FontWeight="SemiBold"
                                                                Foreground="#C9CCD3" TextWrapping="Wrap"/>
-                                                    <TextBlock x:Name="ModDetailsMeta" FontSize="10" Foreground="#7C8290"
+                                                    <TextBlock x:Name="ModDetailsMeta" FontSize="10" Foreground="#9AA0AC"
                                                                TextWrapping="Wrap" Margin="0,3,0,0"/>
                                                     <TextBlock x:Name="ModDetailsDesc" FontSize="11" Foreground="#9AA0AC"
                                                                TextWrapping="Wrap" Margin="0,6,0,0"/>
@@ -757,7 +757,7 @@
                         </Grid>
                     </Border>
                 </Grid>
-                <TextBlock x:Name="SkirmishBuildMarker" Grid.Row="1" Text="" FontSize="9" Foreground="#5B616E"
+                <TextBlock x:Name="SkirmishBuildMarker" Grid.Row="1" Text="" FontSize="9" Foreground="#8B919D"
                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,4,2"
                            IsHitTestVisible="False" Panel.ZIndex="50"/>
             </Grid>
@@ -935,7 +935,7 @@
             <TextBlock Text="ДИСК" FontSize="11" Foreground="#B8BDC8" Margin="0,0,0,10" />
             <TextBlock Name="TxtStorageDisk" FontSize="12" Foreground="#C9CCD3" TextWrapping="Wrap" />
             <Button Content="ОТКРЫТЬ ПАПКУ ИГРЫ" Height="38" Margin="0,14,0,0" Style="{StaticResource SmallButton}" Click="BtnOpenRoot_Click" />
-            <TextBlock Text="Кнопка только открывает папку в Проводнике; она ничего не удаляет." FontSize="11" Foreground="#7A8190" TextWrapping="Wrap" Margin="0,10,0,0" />
+            <TextBlock Text="Кнопка только открывает папку в Проводнике; она ничего не удаляет." FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap" Margin="0,10,0,0" />
             </StackPanel>
             </Border>
             </Grid>
@@ -950,15 +950,17 @@
             <Grid Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <TextBlock Text="Канал" Foreground="#B8BDC8" FontSize="12" VerticalAlignment="Center" />
             <ComboBox Name="CmbUpdateChannel" Grid.Column="1" Width="260" HorizontalAlignment="Left" /></Grid>
-            <TextBlock Name="TxtChannelNow" FontSize="11" Foreground="#7A8190" TextWrapping="Wrap" />
+            <TextBlock Name="TxtChannelNow" FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap" />
             </StackPanel>
             </Border>
+            
             <Border Grid.Column="2" Background="#161B24" BorderBrush="#343A47" BorderThickness="1" Padding="14">
             <StackPanel>
-            <TextBlock Text="ОБНОВЛЕНИЕ КЛИЕНТА" FontSize="11" Foreground="#B8BDC8" Margin="0,0,0,10" />
-            <TextBlock FontSize="11" Foreground="#7A8190" TextWrapping="Wrap" Text="Каналы Pre-release и Dev нужны для тестирования новых версий: возможны неожиданные ошибки. О проблемах сообщайте в Discord, указывая выбранный канал." />
+            <TextBlock Text="Обновление лаунчера и клиента" FontSize="11" Foreground="#B8BDC8" Margin="0,0,0,10" />
+            <TextBlock FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap" Text="Сам лаунчер Yuri's Echo обновляется вместе с модом/клиентом через апдейтер CnCNet-клиента. Отдельного автообновления лаунчера в этой вкладке нет." />
+            <TextBlock FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap" Margin="0,8,0,0" Text="Переключатель канала ниже меняет только канал обновлений CnCNet (updateconfig.ini). После смены канала может потребоваться перезапуск клиента/апдейтера." />
             <Button Content="ПОДДЕРЖКА (DISCORD)" Height="38" Margin="0,14,0,0" Style="{StaticResource SmallButton}" Click="BtnSupport_Click" />
-            <TextBlock Text="Файлы обновляет updater CnCNet-клиента; лаунчер только переключает канал." FontSize="11" Foreground="#7A8190" TextWrapping="Wrap" Margin="0,10,0,0" />
+            <TextBlock FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap" Margin="0,10,0,0" Text="Каналы Pre-release и Dev предназначены для тестирования: возможны ошибки. Сообщая о проблеме, указывайте выбранный канал." />
             </StackPanel>
             </Border>
             </Grid>
@@ -969,7 +971,7 @@
             <Border Background="#161B24" BorderBrush="#343A47" BorderThickness="1" Padding="14">
             <DockPanel>
             <TextBlock DockPanel.Dock="Top" Text="КОМПОНЕНТЫ КЛИЕНТА" FontSize="11" Foreground="#B8BDC8" Margin="0,0,0,10" />
-            <TextBlock DockPanel.Dock="Bottom" Margin="0,10,0,0" FontSize="11" Foreground="#7A8190" TextWrapping="Wrap" Text="Отсутствующие компоненты скачивает updater CnCNet-клиента; лаунчер их не загружает и не удаляет." />
+            <TextBlock DockPanel.Dock="Bottom" Margin="0,10,0,0" FontSize="11" Foreground="#9AA0AC" TextWrapping="Wrap" Text="Отсутствующие компоненты скачивает updater CnCNet-клиента; лаунчер их не загружает и не удаляет." />
             <ListBox Name="ComponentsList" Background="#00FFFFFF" BorderThickness="0" Foreground="#C9CCD3" FontSize="12" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
             </DockPanel>
             </Border>
@@ -1003,15 +1005,20 @@
             <TextBlock Text="СТАТИСТИКА" FontSize="26" Foreground="#C9CCD3" />
             </StackPanel>
             </StackPanel>
-            <Border Grid.Row="1" Margin="0,14,0,14" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
-            <ScrollViewer Margin="18" VerticalScrollBarVisibility="Auto">
-            <TextBlock Name="StatsText" FontFamily="Consolas, Bahnschrift, Segoe UI" FontSize="13" Foreground="#C9CCD3" />
+            <ScrollViewer Grid.Row="1" Margin="0,14,0,14" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <WrapPanel x:Name="StatsCards" Orientation="Horizontal" />
             </ScrollViewer>
-            </Border>
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="НАЗАД" Width="120" Style="{StaticResource SmallButton}" Click="BtnStatsBack_Click" />
             </StackPanel>
             </Grid>
+
+            <!-- ======================= TOAST ======================= -->
+            <Border x:Name="ToastHost" Visibility="Collapsed" IsHitTestVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,28"
+                    Background="#E61A2230" BorderBrush="#4A5568" BorderThickness="1" CornerRadius="2" Padding="16,10">
+                <TextBlock x:Name="ToastText" Foreground="#E6E8EC" FontSize="13" TextWrapping="Wrap" MaxWidth="700"/>
+            </Border>
 
             <!-- ======================= NOTICE OVERLAY ======================= -->
             <Grid x:Name="NoticeOverlay" Visibility="Collapsed" Background="#E60B0F14">
