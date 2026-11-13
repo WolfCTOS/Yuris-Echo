@@ -500,6 +500,8 @@ public static class L10n
         ["Этот цвет уже выбран другим игроком."] = "This color is already selected by another player.",
         ["СОБРАТЬ ДИАГНОСТИКУ"] = "COLLECT DIAGNOSTICS",
         ["КОНФЛИКТ МОДОВ"] = "MOD CONFLICT",
+        ["Загрузка карт..."] = "Loading maps...",
+        ["Отсутствуют обязательные компоненты: {0}. Установите Ares/Phobos (Ares — через CnCNet YR client, Phobos — отдельно, если клиент его не включает) и повторите запуск."] = "Required components are missing: {0}. Install Ares/Phobos (Ares via the CnCNet YR client; Phobos separately if your client does not include it) and try again.",
         ["Диагностика"] = "Diagnostics",
         ["ошибок"] = "errors",
         ["предупреждений"] = "warnings",

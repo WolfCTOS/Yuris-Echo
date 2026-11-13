@@ -1062,6 +1062,20 @@ public static class LauncherCore
 
     public static bool Exists(string relative) => File.Exists(Path.Combine(Root, relative));
 
+    /// <summary>
+    /// Required engine extensions provided outside this repository (CnCNet YR client / separate install).
+    /// Missing files make a Syringe-based launch fail in a non-obvious way.
+    /// </summary>
+    public static (bool ok, string? message) CheckRequiredEngineExtensions()
+    {
+        var missing = new[] { "Ares.dll", "Phobos.dll", "ares.mix" }
+            .Where(f => !Exists(f))
+            .ToList();
+        if (missing.Count == 0) return (true, null);
+        var files = string.Join(", ", missing);
+        return (false, L10n.F("Отсутствуют обязательные компоненты: {0}. Установите Ares/Phobos (Ares — через CnCNet YR client, Phobos — отдельно, если клиент его не включает) и повторите запуск.", files));
+    }
+
     public static void Launch(string exe, List<string>? args = null)
     {
         var path = Path.IsPathRooted(exe) ? exe : Path.Combine(Root, exe);
@@ -1085,6 +1099,9 @@ public static class LauncherCore
         var (sOk, _) = CheckExe(cfg.Syringe);
         if (sOk)
         {
+            var (extOk, extMsg) = CheckRequiredEngineExtensions();
+            if (!extOk) throw new UserFacingException(extMsg!);
+
             // The game executable is the last Syringe argument; the game
             // arguments travel in one "--args=..." group after it, the way the
             // CnCNet client passes them. Syringe only forwards the whole group
@@ -1123,6 +1140,9 @@ public static class LauncherCore
             Launch(gameExe, new List<string> { "-SPAWN", "-CD" });
             return DateTime.UtcNow;
         }
+
+        var (extOk, extMsg) = CheckRequiredEngineExtensions();
+        if (!extOk) throw new UserFacingException(extMsg!);
 
         var args = BuildSpawnSyringeArgs(gameExe, def);
         Launch(launcherExe, args);

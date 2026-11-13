@@ -63,6 +63,11 @@ public partial class MainWindow : Window
     private DispatcherTimer? _skirmishSaveTimer;
     private bool _skirmishSavePending;
     private CancellationTokenSource? _storageCts;
+    private DispatcherTimer? _mapSearchTimer;
+    private DispatcherTimer? _modSearchTimer;
+    private CancellationTokenSource? _mapCatalogCts;
+    private int _mapCatalogLoadVersion;
+    private int _statsLoadVersion;
 
     public MainWindow()
     {
@@ -440,7 +445,62 @@ public partial class MainWindow : Window
         ShowOnly(SkirmishView);
         LauncherCore.EnsureSkirmishDefaults(_cfg.Skirmish);
 
-        _mapCatalog = MapCatalog.Load();
+        // Build UI that does not depend on the map catalog immediately.
+        _syncing = true;
+        BuildSettingsPanel();
+        BuildPresetCombo();
+        ChkShowDevMods.IsChecked = _cfg.Skirmish.ShowDevMods;
+        BuildModsPanel();
+        SkirmishTabs.SelectedIndex = Math.Clamp(_cfg.Skirmish.ActiveTab, 0, 1);
+        _syncing = false;
+
+        UpdateLayout();
+        L10n.Apply(this);
+        UpdateModsCounter();
+
+        LoadSkirmishMapCatalogAsync();
+    }
+
+    private void LoadSkirmishMapCatalogAsync()
+    {
+        try { _mapCatalogCts?.Cancel(); _mapCatalogCts?.Dispose(); } catch { }
+        var cts = new CancellationTokenSource();
+        _mapCatalogCts = cts;
+        var version = ++_mapCatalogLoadVersion;
+        var token = cts.Token;
+
+        // Placeholder while the catalog is being read/built.
+        if (MapList != null)
+        {
+            MapList.ItemsSource = null;
+            MapList.Items.Clear();
+        }
+        if (MapName != null) MapName.Text = L10n.T("Загрузка карт...");
+        if (MapPath != null) MapPath.Text = "";
+        if (SkirmishStatus != null) SkirmishStatus.Text = "";
+
+        _ = Task.Run(() =>
+        {
+            MapCatalog catalog;
+            try { catalog = MapCatalog.Load(); }
+            catch (Exception ex)
+            {
+                LauncherLog.Error("Failed to load the map catalog", ex);
+                catalog = new MapCatalog();
+            }
+            if (token.IsCancellationRequested) return;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (token.IsCancellationRequested || version != _mapCatalogLoadVersion) return;
+                if (SkirmishView == null || SkirmishView.Visibility != Visibility.Visible) return;
+                ApplyLoadedMapCatalog(catalog);
+            }), DispatcherPriority.Background);
+        }, token);
+    }
+
+    private void ApplyLoadedMapCatalog(MapCatalog catalog)
+    {
+        _mapCatalog = catalog ?? new MapCatalog();
         _currentMapMode = _mapCatalog.ResolveMode(_cfg.Skirmish.SelectedMode, SelectedMapPath());
         _cfg.Skirmish.SelectedMode = _currentMapMode;
 
@@ -448,11 +508,6 @@ public partial class MainWindow : Window
         BuildMapModeCombo();
         RefreshMaps();
         BuildPlayerTable();
-        BuildSettingsPanel();
-        BuildPresetCombo();
-        ChkShowDevMods.IsChecked = _cfg.Skirmish.ShowDevMods;
-        BuildModsPanel();
-        SkirmishTabs.SelectedIndex = Math.Clamp(_cfg.Skirmish.ActiveTab, 0, 1);
         _syncing = false;
 
         if (!_mapCatalog.ModeContains(_currentMapMode, SelectedMapPath()))
@@ -469,9 +524,6 @@ public partial class MainWindow : Window
 
         SaveSkirmishState();
         UpdateSkirmishStatus();
-        UpdateLayout();
-        L10n.Apply(this);
-        UpdateModsCounter();
         UpdateStartButtonState();
     }
 
@@ -811,9 +863,7 @@ public partial class MainWindow : Window
         UpdateLayout();
         L10n.Apply(this);
 
-        var mods = _mods.ToList();
-        var active = new HashSet<string>(_active, StringComparer.Ordinal);
-        var cfg = _cfg;
+        var version = ++_statsLoadVersion;
         _ = Task.Run(() =>
         {
             List<MapEntry> maps;
@@ -821,8 +871,10 @@ public partial class MainWindow : Window
             catch { maps = new List<MapEntry>(); }
             Dispatcher.BeginInvoke(new Action(() =>
             {
+                if (version != _statsLoadVersion) return;
                 _maps = maps;
-                BuildStatsCards();
+                if (StatsView.Visibility == Visibility.Visible)
+                    BuildStatsCards();
             }), DispatcherPriority.Background);
         });
     }
@@ -1626,9 +1678,20 @@ public partial class MainWindow : Window
 
     private void ModSearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        _modFilter = ModSearchBox.Text.Trim();
         if (ModSearchHint != null)
-            ModSearchHint.Visibility = _modFilter.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+            ModSearchHint.Visibility = ModSearchBox.Text.Trim().Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+
+        _modSearchTimer ??= new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(180) };
+        _modSearchTimer.Stop();
+        _modSearchTimer.Tick -= ModSearchTimer_Tick;
+        _modSearchTimer.Tick += ModSearchTimer_Tick;
+        _modSearchTimer.Start();
+    }
+
+    private void ModSearchTimer_Tick(object? sender, System.EventArgs e)
+    {
+        _modSearchTimer?.Stop();
+        _modFilter = ModSearchBox?.Text.Trim() ?? "";
         BuildModsPanel();
     }
 
@@ -2565,9 +2628,25 @@ public partial class MainWindow : Window
 
     private void MapSearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        _mapFilter = MapSearchBox.Text.Trim();
-        MapSearchHint.Visibility = _mapFilter.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
-        RefreshMaps();
+        MapSearchHint.Visibility = MapSearchBox.Text.Trim().Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+
+        _mapSearchTimer ??= new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(180) };
+        _mapSearchTimer.Stop();
+        _mapSearchTimer.Tick -= MapSearchTimer_Tick;
+        _mapSearchTimer.Tick += MapSearchTimer_Tick;
+        _mapSearchTimer.Start();
+    }
+
+    private void MapSearchTimer_Tick(object? sender, System.EventArgs e)
+    {
+        _mapSearchTimer?.Stop();
+        ApplyMapSearchFilter(refresh: true);
+    }
+
+    private void ApplyMapSearchFilter(bool refresh)
+    {
+        _mapFilter = MapSearchBox?.Text.Trim() ?? "";
+        if (refresh) RefreshMaps();
     }
 
     private void MapSearchAllLink_Click(object sender, MouseButtonEventArgs e)
@@ -2581,6 +2660,8 @@ public partial class MainWindow : Window
         if (_syncing || CmbMapMode?.SelectedItem is not MapModeItem mi) return;
         _currentMapMode = mi.Key;
         _cfg.Skirmish.SelectedMode = mi.Key;
+        _mapSearchTimer?.Stop();
+        ApplyMapSearchFilter(refresh: false);
         // If saved/selected map is not in this mode, switching to "All maps" is handled by refresh+resolve on load;
         // on user switch keep selection if present in new mode, else refresh will pick first.
         SaveSkirmishState();
@@ -2973,6 +3054,21 @@ public partial class MainWindow : Window
         s.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
     // ---------------------------------------------------------------- notice
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        try
+        {
+            SaveSkirmishState(flush: true);
+            _mapSearchTimer?.Stop();
+            _modSearchTimer?.Stop();
+            _skirmishSaveTimer?.Stop();
+            _storageCts?.Cancel();
+            _mapCatalogCts?.Cancel();
+        }
+        catch { }
+        base.OnClosing(e);
+    }
 
     private System.Windows.Threading.DispatcherTimer? _toastTimer;
 
