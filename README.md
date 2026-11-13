@@ -9,7 +9,7 @@ the rules checker knows the lobby (see below).**
 
 ## Contents
 
-- `Ares.dll`, `Phobos.dll`, `LuaAPI.dll`, `Syringe.exe` — the engine stack
+- `LuaAPI.dll`, `Syringe.exe` (0.1.0.4, remains in this repository) — engine/loader components distributed here
 - `Yuri's Echo.exe`, `YurisEcho.dll` — the launcher (source in `Tools\`)
 - `rulesmd.ini`, `artmd.ini` — Yuri's Echo rules and art
 - `mods\` - Yuri's Echo, Smart AI, AI Telemetry, AI Ignore, Humvee,
@@ -17,10 +17,20 @@ the rules checker knows the lobby (see below).**
 - `scripts\` - LuaAPI framework
 - `Tools\rules_check.ps1` - consistency check for `rulesmd.ini`
 
+## Requirements
+
+Required engine extensions **not distributed in this repository**:
+
+- **Ares** (`Ares.dll`, `ares.mix`) — provided by the **CnCNet YR client**. Verified with FileVersion `21.352.1218`, ProductVersion `3.0p1` (`D:\Games\Red Alert 2 LuaAPI\Ares.dll`).
+- **Phobos** (`Phobos.dll`) — install separately if your client does not include it. Releases: https://github.com/Phobos-developers/Phobos/releases. Verified with FileVersion `0.4.0.2`, ProductVersion `Release Build 0.4.0.2` (`D:\Games\Red Alert 2 LuaAPI\Phobos.dll`).
+
+Place these files in the Yuri's Revenge 1.001 game folder together with the files from this repository.
+
 ## Install
 
-1. Copy everything in this repository into the Yuri's Revenge 1.001 game
-   folder (next to `gamemd.exe`).
+1. Copy the contents of this repository into the Yuri's Revenge 1.001 game
+   folder (next to `gamemd.exe`), and make sure the required **Ares/Phobos**
+   files from the CnCNet YR client are present there as well.
 2. Run `Yuri's Echo.exe`.
 3. Press **Launch Game**. The launcher starts `gamemd.exe` through
    `Syringe.exe` with `Ares.dll` and `Phobos.dll`, then injects

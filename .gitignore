@@ -50,3 +50,10 @@ Backup/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Engine extensions not distributed in this repository (provided by CnCNet YR)
+# ─────────────────────────────────────────────────────────────────────────────
+/Ares.dll
+/Phobos.dll
+/ares.mix
