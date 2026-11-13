@@ -615,8 +615,34 @@
                             </StackPanel>
 
                             <ListBox x:Name="MapList" Background="Transparent" BorderThickness="0" Foreground="#C9CCD3"
-                                     DisplayMemberPath="DisplayName" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                     SelectionChanged="MapList_SelectionChanged"/>
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     SelectionChanged="MapList_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Width="22" Height="22" Margin="0,0,4,0" Padding="0"
+                                                    Background="Transparent" BorderThickness="0" Focusable="False"
+                                                    Cursor="Hand" Click="MapFavorite_Click"
+                                                    ToolTip="В избранное" ToolTipService.ShowOnDisabled="True">
+                                                <TextBlock x:Name="FavStar" Text="☆" FontSize="14" Foreground="#8B919D"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Button>
+                                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Foreground="#C9CCD3"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                <Setter TargetName="FavStar" Property="Text" Value="★"/>
+                                                <Setter TargetName="FavStar" Property="Foreground" Value="#E6B85C"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </DockPanel>
                     </Border>
 

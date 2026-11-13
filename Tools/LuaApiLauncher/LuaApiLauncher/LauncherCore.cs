@@ -85,6 +85,9 @@ public sealed class MapEntry
     public bool InMpMaps { get; set; }
     public bool HasMpSection { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsFavorite { get; set; }
+
     public override string ToString() => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 }
 
@@ -428,6 +431,8 @@ public sealed class SkirmishConfig
     public List<SkirmishPlayer> Players { get; set; } = new();
     /// <summary>Saved mod presets: name -> mod ids.</summary>
     public Dictionary<string, List<string>> Presets { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Maps marked as favorites (map Relative paths), shown at the top of the skirmish map list.</summary>
+    public List<string> FavoriteMaps { get; set; } = new();
 }
 
 public sealed class LauncherConfig
@@ -809,6 +814,7 @@ public static class LauncherCore
         cfg.Options ??= new SkirmishOptions();
         cfg.Players ??= new List<SkirmishPlayer>();
         cfg.Presets ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        cfg.FavoriteMaps ??= new List<string>();
 
         if (cfg.Players.Count > MaxSkirmishSlots)
             cfg.Players.RemoveRange(MaxSkirmishSlots, cfg.Players.Count - MaxSkirmishSlots);
