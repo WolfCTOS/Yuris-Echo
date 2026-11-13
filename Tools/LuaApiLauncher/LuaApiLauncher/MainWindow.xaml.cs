@@ -1,12 +1,16 @@
 ﻿using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace LuaApiLauncher;
 
@@ -22,6 +26,20 @@ public partial class MainWindow : Window
     internal List<ModInfo> Mods => _mods;
     /// <summary>Exposed to the separate mod manager window.</summary>
     internal HashSet<string> ActiveMods => _active;
+    /// <summary>Exposed to the separate mod manager window.</summary>
+    internal LauncherConfig Config => _cfg;
+
+    /// <summary>
+    /// Takes over the active mod list of the mod manager. The set is written
+    /// into the configuration as well, so launcher_config.json and
+    /// active_mods.txt cannot drift apart.
+    /// </summary>
+    internal void ApplyActiveMods(IEnumerable<string> ids)
+    {
+        _active.Clear();
+        foreach (var id in ids) _active.Add(id);
+        _cfg.ActiveMods = new HashSet<string>(_active, StringComparer.Ordinal);
+    }
 
     /// <summary>Refreshes UI after the active mod set changed elsewhere (e.g. mod manager).</summary>
     internal void UpdateModsUi()
@@ -42,11 +60,40 @@ public partial class MainWindow : Window
     private string _mapFilter = "";
     private bool _syncing;
 
+    private DispatcherTimer? _skirmishSaveTimer;
+    private bool _skirmishSavePending;
+    private CancellationTokenSource? _storageCts;
+
     public MainWindow()
     {
         InitializeComponent();
         Width = Theme.WindowWidth; Height = Theme.WindowHeight;
+        MapPreview.SizeChanged += (_, _) => UpdateStartMarkers();
+        MapPreviewOverlay.SizeChanged += (_, _) => UpdateStartMarkers();
+        // Map rows are list items, not buttons, so they need their own click sound.
+        MapList.AddHandler(ListBoxItem.MouseLeftButtonUpEvent, new MouseButtonEventHandler(ListItem_Click));
+        // The background picture drifts with the pointer.
+        RootLayout.MouseMove += (_, e) => OnBackgroundMouseMove(e);
+        RootLayout.MouseLeave += (_, _) => OnBackgroundMouseLeave();
         Loaded += (_, _) => Init();
+    }
+
+    /// <summary>Plays the UI click sound when a row of a list is clicked.</summary>
+    private static void ListItem_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (IsInsideListItem(e.OriginalSource)) UiSfx.PlayClick();
+    }
+
+    private static bool IsInsideListItem(object? source)
+    {
+        DependencyObject? node = source as DependencyObject;
+        while (node != null)
+        {
+            if (node is ListBoxItem) return true;
+            try { node = VisualTreeHelper.GetParent(node); }
+            catch { return false; }
+        }
+        return false;
     }
 
     private bool _fullscreenClient;
@@ -182,12 +229,20 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ReloadState()
+    private void ReloadState(bool rescanMods = true)
     {
-        _mods = LauncherCore.ScanMods();
+        if (rescanMods || _mods.Count == 0)
+            _mods = LauncherCore.ScanMods();
         _cfg = LauncherCore.LoadConfig(_mods);
         _active = LauncherCore.ReadActiveIds(_mods);
     }
+
+    /// <summary>
+    /// The absolute path of the map that was selected last. The configuration
+    /// stores the map relative to the game folder, so the selection survives
+    /// moving the installation.
+    /// </summary>
+    private string SelectedMapPath() => LauncherCore.ResolveGamePath(_cfg.Skirmish.SelectedMap);
 
     // ---------------------------------------------------------------- background
 
@@ -228,6 +283,88 @@ public partial class MainWindow : Window
             Color.FromArgb(0, 0, 0, 0),
             Color.FromArgb(153, 11, 15, 20))
         { GradientOrigin = new Point(0.5, 0.5), Center = new Point(0.5, 0.5), RadiusX = 0.75, RadiusY = 0.75 };
+
+        SetupBackgroundParallax();
+    }
+
+    // ---------------------------------------------------------------- background parallax
+
+    /// <summary>How far the background picture may drift, in design pixels.</summary>
+    private const double BgShiftX = 18;
+    private const double BgShiftY = 8;
+
+    private DispatcherTimer? _bgTimer;
+    private TranslateTransform? _bgShift;
+    private double _bgTargetX, _bgTargetY;
+    private double _bgPosX, _bgPosY;
+
+    /// <summary>
+    /// Lets the background picture follow the pointer. The picture is zoomed in
+    /// a little so it can move without exposing the window edges, then eased
+    /// towards the pointer position frame by frame.
+    /// </summary>
+    private void SetupBackgroundParallax()
+    {
+        if (BgImage.Visibility != Visibility.Visible) return;
+        if (!SystemParameters.ClientAreaAnimation) return;
+
+        var scale = new ScaleTransform(1.08, 1.08);
+        _bgShift = new TranslateTransform();
+        var group = new TransformGroup();
+        group.Children.Add(scale);
+        group.Children.Add(_bgShift);
+        BgImage.RenderTransform = group;
+        BgImage.RenderTransformOrigin = new Point(0.5, 0.5);
+
+        _bgTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
+        _bgTimer.Tick += (_, _) => StepBackgroundParallax();
+    }
+
+    private void OnBackgroundMouseMove(MouseEventArgs e)
+    {
+        if (_bgShift == null || _bgTimer == null) return;
+
+        var p = e.GetPosition(RootLayout);
+        var w = RootLayout.ActualWidth;
+        var h = RootLayout.ActualHeight;
+        if (w <= 0 || h <= 0) return;
+
+        var nx = Math.Clamp((p.X / w) * 2 - 1, -1, 1);
+        var ny = Math.Clamp((p.Y / h) * 2 - 1, -1, 1);
+        _bgTargetX = nx * BgShiftX;
+        _bgTargetY = ny * BgShiftY;
+
+        if (!_bgTimer.IsEnabled) _bgTimer.Start();
+    }
+
+    /// <summary>Pointer left the window: the picture drifts back to the middle.</summary>
+    private void OnBackgroundMouseLeave()
+    {
+        _bgTargetX = 0;
+        _bgTargetY = 0;
+        if (_bgTimer != null && !_bgTimer.IsEnabled) _bgTimer.Start();
+    }
+
+    private void StepBackgroundParallax()
+    {
+        if (_bgShift == null || _bgTimer == null) return;
+
+        var dx = _bgTargetX - _bgPosX;
+        var dy = _bgTargetY - _bgPosY;
+        if (Math.Abs(dx) < 0.05 && Math.Abs(dy) < 0.05)
+        {
+            _bgPosX = _bgTargetX;
+            _bgPosY = _bgTargetY;
+            _bgShift.X = _bgPosX;
+            _bgShift.Y = _bgPosY;
+            _bgTimer.Stop();
+            return;
+        }
+
+        _bgPosX += dx * 0.15;
+        _bgPosY += dy * 0.15;
+        _bgShift.X = _bgPosX;
+        _bgShift.Y = _bgPosY;
     }
 
     private static ImageSource MakeNoise(int w, int h)
@@ -292,7 +429,7 @@ public partial class MainWindow : Window
     private void ShowMain()
     {
         ShowOnly(MainView);
-        ReloadState();
+        ReloadState(rescanMods: false);
         UpdateMainStatus();
         UpdateLayout();
         L10n.Apply(this);
@@ -304,7 +441,7 @@ public partial class MainWindow : Window
         LauncherCore.EnsureSkirmishDefaults(_cfg.Skirmish);
 
         _mapCatalog = MapCatalog.Load();
-        _currentMapMode = _mapCatalog.ResolveMode(_cfg.Skirmish.SelectedMode, _cfg.Skirmish.SelectedMap);
+        _currentMapMode = _mapCatalog.ResolveMode(_cfg.Skirmish.SelectedMode, SelectedMapPath());
         _cfg.Skirmish.SelectedMode = _currentMapMode;
 
         _syncing = true;
@@ -318,7 +455,7 @@ public partial class MainWindow : Window
         SkirmishTabs.SelectedIndex = Math.Clamp(_cfg.Skirmish.ActiveTab, 0, 1);
         _syncing = false;
 
-        if (!_mapCatalog.ModeContains(_currentMapMode, _cfg.Skirmish.SelectedMap))
+        if (!_mapCatalog.ModeContains(_currentMapMode, SelectedMapPath()))
         {
             // Saved map not in saved mode -> switch to All maps.
             _currentMapMode = MapCatalog.AllMapsMode;
@@ -348,7 +485,7 @@ public partial class MainWindow : Window
     private void ShowOptions()
     {
         ShowOnly(OptionsView);
-        ReloadState();
+        ReloadState(rescanMods: false);
         BuildOptions();
 
         _suppressDirty = true;
@@ -616,20 +753,31 @@ public partial class MainWindow : Window
         ComponentsList.ItemsSource = LauncherExtras.ScanComponents();
         ComponentsList.DisplayMemberPath = "Display";
 
-        // Storage scan can be slow (walks the whole game folder); compute after UI opens.
+        // Storage scan walks the whole game folder; compute off the UI thread.
         TxtStorage.Text = "...";
         TxtStorageDisk.Text = "...";
-        Dispatcher.BeginInvoke(new Action(() =>
+        try { _storageCts?.Cancel(); _storageCts?.Dispose(); } catch { }
+        var cts = new CancellationTokenSource();
+        _storageCts = cts;
+        var token = cts.Token;
+        _ = Task.Run(() =>
         {
             try
             {
+                if (token.IsCancellationRequested) return;
                 var storage = LauncherExtras.StorageReport();
+                if (token.IsCancellationRequested) return;
                 var disk = LauncherExtras.DiskReport();
-                TxtStorage.Text = storage;
-                TxtStorageDisk.Text = disk;
+                if (token.IsCancellationRequested) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (token.IsCancellationRequested) return;
+                    TxtStorage.Text = storage;
+                    TxtStorageDisk.Text = disk;
+                }), DispatcherPriority.Background);
             }
             catch { }
-        }), System.Windows.Threading.DispatcherPriority.Background);
+        }, token);
     }
 
     private static string ClientIni => Path.Combine(LauncherCore.Root, "RA2MD.INI");
@@ -658,11 +806,25 @@ public partial class MainWindow : Window
     private void ShowStats()
     {
         ShowOnly(StatsView);
-        ReloadState();
-        _maps = LauncherCore.ScanMaps();
-        BuildStatsCards();
+        ReloadState(rescanMods: false);
+        if (StatsCards != null) StatsCards.Children.Clear();
         UpdateLayout();
         L10n.Apply(this);
+
+        var mods = _mods.ToList();
+        var active = new HashSet<string>(_active, StringComparer.Ordinal);
+        var cfg = _cfg;
+        _ = Task.Run(() =>
+        {
+            List<MapEntry> maps;
+            try { maps = LauncherCore.ScanMaps(); }
+            catch { maps = new List<MapEntry>(); }
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _maps = maps;
+                BuildStatsCards();
+            }), DispatcherPriority.Background);
+        });
     }
 
     private void AddStatCard(string title, IEnumerable<(string label, string value)> rows)
@@ -737,6 +899,18 @@ public partial class MainWindow : Window
         }
         else luaRows.Add((L10n.T("статус"), L10n.T("нет файла")));
         AddStatCard("LUAAPI.LOG", luaRows);
+
+        var launcherRows = new System.Collections.Generic.List<(string,string)>();
+        var (errCount, warnCount, logSize, logModified) = LauncherLog.Summary();
+        if (logModified != DateTime.MinValue)
+        {
+            launcherRows.Add((L10n.T("изменён"), logModified.ToString("yyyy-MM-dd HH:mm:ss")));
+            launcherRows.Add((L10n.T("размер"), LauncherCore.FormatSize(logSize)));
+            launcherRows.Add((L10n.T("ошибок"), errCount.ToString()));
+            launcherRows.Add((L10n.T("предупреждений"), warnCount.ToString()));
+        }
+        else launcherRows.Add((L10n.T("статус"), L10n.T("нет файла")));
+        AddStatCard("LAUNCHER.LOG", launcherRows);
     }
 
     private void UpdateMainStatus()
@@ -787,7 +961,7 @@ public partial class MainWindow : Window
     private void ShowCompanySelect()
     {
         ShowOnly(CompanyView);
-        ReloadState();
+        ReloadState(rescanMods: false);
         _campaignSides = CampaignData.LoadSides();
         BuildCampaignSideTabs();
 
@@ -1008,7 +1182,7 @@ public partial class MainWindow : Window
             CompanyStatus.Text = L10n.F("Запуск миссии: {0} ({1}).", mission.DisplayName, mission.LaunchScenario);
 
             LauncherCore.SaveActiveIds(_mods, _active, _cfg);
-            var started = LauncherCore.LaunchCampaignMission(_cfg);
+            var started = LauncherCore.LaunchSpawnedGame(_cfg);
 
             // With spawn, the actual game process is gamemd-spawn.exe or gamemd.exe.
             var gameProcess = Path.GetFileNameWithoutExtension(
@@ -1054,6 +1228,7 @@ public partial class MainWindow : Window
                 await Task.Delay(4000).ConfigureAwait(false);
                 if (IsGameRunning(processName, startedUtc))
                 {
+                    LauncherLog.Step("watch", $"{processName}.exe survived the mission load");
                     TryOnUi(() => CompanyStatus.Text = L10n.F("Миссия запущена: {0}.", missionLabel));
                     return;
                 }
@@ -1098,7 +1273,7 @@ public partial class MainWindow : Window
             if (Dispatcher.CheckAccess()) action();
             else Dispatcher.Invoke(action);
         }
-        catch { }
+        catch (Exception ex) { LauncherLog.Error("UI update failed", ex); }
     }
 
     private void BtnMapEditor_Click(object sender, EventArgs e)
@@ -1126,6 +1301,7 @@ public partial class MainWindow : Window
         var mgr = new ModManagerWindow(this);
         mgr.ShowDialog();
         // The manager persists changes on the fly; reload and refresh all UI.
+        LauncherCore.InvalidateModsCache();
         _mods = LauncherCore.ScanMods();
         _active = LauncherCore.ReadActiveIds(_mods);
         UpdateModsUi();
@@ -1256,9 +1432,15 @@ public partial class MainWindow : Window
             cb.Click += (_, _) =>
             {
                 if (_syncing) return;
+                var conflictBefore = LauncherCore.HasAiModConflict(_active);
                 if (cb.IsChecked == true) _active.Add(m.Id); else _active.Remove(m.Id);
                 PersistActive();
                 BuildModsPanel();
+
+                // The warning belongs to the moment the conflict is created:
+                // repeating it on every later change would be noise.
+                if (!conflictBefore && LauncherCore.HasAiModConflict(_active))
+                    ShowNotice(L10n.T("КОНФЛИКТ МОДОВ"), L10n.T(L10n.AiModConflictMessage));
             };
             Grid.SetColumn(cb, 0);
             grid.Children.Add(cb);
@@ -1700,11 +1882,12 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------------- skirmish: players
 
-    /// <summary>Table columns: slot, name, faction, colour, team, start, remove.</summary>
-    private static readonly double[] PlayerColWidths = { 34, 0, 104, 84, 74, 76, 24 };
+    /// <summary>Table columns: slot, name, faction, colour, team, start, AI difficulty, remove.</summary>
+    private static readonly double[] PlayerColWidths = { 30, 0, 86, 68, 60, 56, 84, 22 };
 
     private const int PlayerNameColumn = 1;
-    private const int PlayerRemoveColumn = 6;
+    private const int PlayerDifficultyColumn = 6;
+    private const int PlayerRemoveColumn = 7;
 
     private static Grid NewPlayerGrid()
     {
@@ -1746,9 +1929,21 @@ public partial class MainWindow : Window
 
     // maxPlayers comes from MapCatalog/MapEntry (MPMaps.ini primary, waypoints fallback). No duplicate parsing.
 
+    private MapEntry? CurrentMapEntry()
+    {
+        if (MapList?.SelectedItem is MapEntry selected) return selected;
+        return _mapCatalog.AllMaps.FirstOrDefault(m =>
+            string.Equals(m.FilePath, SelectedMapPath(), StringComparison.OrdinalIgnoreCase));
+    }
+
     private string? GetStartBlockReason()
     {
         var cfg = _cfg.Skirmish;
+        var map = CurrentMapEntry();
+        if (map == null)
+            return L10n.T("Выберите карту.");
+        if (!SkirmishSpawn.SupportsMap(map))
+            return L10n.T("Для этой карты нет распакованного .map/.yrm файла. Выберите другую карту.");
         if (cfg.Players.Count > _currentMapMaxPlayers)
             return L10n.F("На этой карте максимум {0} игроков, сейчас {1}. Удалите лишние слоты.",
                 _currentMapMaxPlayers, cfg.Players.Count);
@@ -1805,6 +2000,7 @@ public partial class MainWindow : Window
         SetCell(head, PlayerCell(L10n.T("ЦВЕТ"), 10, Theme.TextSecondaryB), 3);
         SetCell(head, PlayerCell(L10n.T("КОМАНДА"), 10, Theme.TextSecondaryB), 4);
         SetCell(head, PlayerCell(L10n.T("СТАРТ"), 10, Theme.TextSecondaryB), 5);
+        SetCell(head, PlayerCell(L10n.T("СЛОЖНОСТЬ"), 10, Theme.TextSecondaryB), PlayerDifficultyColumn);
         PlayerTablePanel.Children.Add(head);
 
         for (var i = 0; i < cfg.Players.Count; i++)
@@ -1835,18 +2031,22 @@ public partial class MainWindow : Window
                 if (_syncing) return;
                 player.Name = name.Text;
                 SaveSkirmishState();
+                UpdateStartMarkers();
             };
             SetCell(row, name, PlayerNameColumn);
 
-            // Random is stored as -1 so the saved side indices stay game indices.
+            // The rules decide which factions exist, so the table lists the
+            // factions of rulesmd.ini. Random is stored as -1.
             var side = PlayerCombo();
             side.Items.Add(L10n.T("Случайно"));
-            foreach (var faction in factions) side.Items.Add(faction);
-            side.SelectedIndex = player.Side < 0 ? 0 : Math.Clamp(player.Side + 1, 1, side.Items.Count - 1);
+            foreach (var faction in factions) side.Items.Add(L10n.T(faction.Name));
+            var picked = player.Country < 0 ? 0 : factions.FindIndex(f => f.PrimaryIndex == player.Country) + 1;
+            side.SelectedIndex = picked > 0 ? Math.Clamp(picked, 1, side.Items.Count - 1) : 0;
             side.SelectionChanged += (_, _) =>
             {
                 if (_syncing) return;
-                player.Side = side.SelectedIndex <= 0 ? -1 : side.SelectedIndex - 1;
+                var index = side.SelectedIndex - 1;
+                player.Country = index >= 0 && index < factions.Count ? factions[index].PrimaryIndex : -1;
                 SaveSkirmishState();
             };
             SetCell(row, side, 2);
@@ -1870,6 +2070,7 @@ public partial class MainWindow : Window
                 }
                 player.Color = newColor;
                 SaveSkirmishState();
+                UpdateStartMarkers();
                 UpdateStartButtonState();
             };
             SetCell(row, color, 3);
@@ -1887,16 +2088,38 @@ public partial class MainWindow : Window
 
             var start = PlayerCombo();
             start.Items.Add(L10n.T("Случайно"));
-            for (var s = 1; s <= _currentMapMaxPlayers; s++) start.Items.Add(L10n.F("поз. {0}", s));
+            for (var s = 1; s <= _currentMapMaxPlayers; s++) start.Items.Add(s.ToString());
             start.SelectedIndex = Math.Clamp(player.Start, 0, _currentMapMaxPlayers);
             start.SelectionChanged += (_, _) =>
             {
                 if (_syncing) return;
                 player.Start = Math.Max(0, start.SelectedIndex);
                 SaveSkirmishState();
+                UpdateStartMarkers();
                 UpdateStartButtonState();
             };
             SetCell(row, start, 5);
+
+            if (player.IsHuman)
+            {
+                SetCell(row, PlayerCell("", 11, Theme.TextSecondaryB), PlayerDifficultyColumn);
+            }
+            else
+            {
+                var difficulty = PlayerCombo();
+                difficulty.Items.Add(L10n.T("Легкая"));
+                difficulty.Items.Add(L10n.T("Средняя"));
+                difficulty.Items.Add(L10n.T("Сложная"));
+                difficulty.SelectedIndex = Math.Clamp(player.AiLevel, 0, 2);
+                difficulty.ToolTip = L10n.T("Сложность ИИ для этого слота.");
+                difficulty.SelectionChanged += (_, _) =>
+                {
+                    if (_syncing) return;
+                    player.AiLevel = Math.Clamp(difficulty.SelectedIndex, 0, 2);
+                    SaveSkirmishState();
+                };
+                SetCell(row, difficulty, PlayerDifficultyColumn);
+            }
 
             var canRemove = cfg.Players.Count > LauncherCore.MinSkirmishSlots;
             var remove = new Button
@@ -1952,7 +2175,237 @@ public partial class MainWindow : Window
         };
         PlayerTablePanel.Children.Add(add);
 
+        UpdateStartMarkers();
         UpdateStartButtonState();
+    }
+
+    // ---------------------------------------------------------------- skirmish: start markers
+
+    private Popup? _startPopup;
+
+    /// <summary>
+    /// Draws the map's starting positions on top of the preview. Left click
+    /// assigns the position to a player (the same idea as the CnCNet lobby),
+    /// right click clears it back to "Random".
+    /// </summary>
+    private void UpdateStartMarkers()
+    {
+        if (MapPreviewOverlay == null) return;
+        CloseStartPopup();
+        MapPreviewOverlay.Children.Clear();
+
+        var map = CurrentMapEntry();
+        if (map == null || MapPreview.Source is not BitmapSource bmp)
+        {
+            if (MapSize != null) MapSize.Text = "";
+            return;
+        }
+
+        var imageWidth = MapPreview.ActualWidth;
+        var imageHeight = MapPreview.ActualHeight;
+        if (imageWidth <= 0 || imageHeight <= 0) return;
+
+        // The preview Image sizes itself to the source aspect and is centered in
+        // the overlay Canvas, so the Canvas origin is not the image origin.
+        var imageOrigin = MapPreview.TranslatePoint(new Point(0, 0), MapPreviewOverlay);
+
+        var markers = StartLocations.Read(map, bmp.PixelWidth, bmp.PixelHeight)
+            .Take(Math.Max(0, _currentMapMaxPlayers)).ToList();
+        if (markers.Count == 0)
+        {
+            if (MapSize != null) MapSize.Text = "";
+            return;
+        }
+
+        if (MapSize != null)
+            MapSize.Text = L10n.T("Клик по метке — назначить старт игроку. ПКМ — сбросить.");
+
+        var scale = Math.Min(imageWidth / bmp.PixelWidth, imageHeight / bmp.PixelHeight);
+        var offsetX = imageOrigin.X + (imageWidth - bmp.PixelWidth * scale) / 2;
+        var offsetY = imageOrigin.Y + (imageHeight - bmp.PixelHeight * scale) / 2;
+        var colors = LauncherCore.SkirmishColors();
+
+        foreach (var marker in markers)
+        {
+            var owner = _cfg.Skirmish.Players.FirstOrDefault(p => p.Start == marker.Number);
+            Brush? ownerBrush = null;
+            if (owner != null && owner.Color >= 0 && owner.Color < colors.Count)
+                ownerBrush = ParseRgb(colors[owner.Color].Rgb);
+
+            var centerX = offsetX + marker.X * scale;
+            var centerY = offsetY + marker.Y * scale;
+            var number = marker.Number;
+
+            var badge = new Border
+            {
+                Width = 26,
+                Height = 26,
+                CornerRadius = new CornerRadius(13),
+                Background = ownerBrush ?? new SolidColorBrush(Color.FromArgb(0xCC, 0x11, 0x15, 0x1D)),
+                BorderBrush = ownerBrush != null ? Theme.WhiteB : Theme.StrokeB,
+                BorderThickness = new Thickness(2),
+                Cursor = Cursors.Hand,
+                ToolTip = L10n.F("Стартовая позиция {0}", number),
+                Child = new TextBlock
+                {
+                    Text = number.ToString(CultureInfo.InvariantCulture),
+                    FontSize = 12,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = ownerBrush != null ? Theme.WindowBgB : Theme.TextPrimaryB,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            badge.MouseEnter += (_, _) => badge.BorderBrush = Theme.AccentB;
+            badge.MouseLeave += (_, _) => badge.BorderBrush = ownerBrush != null ? Theme.WhiteB : Theme.StrokeB;
+            badge.MouseLeftButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                ShowStartPopup(badge, number);
+            };
+            badge.MouseRightButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                ClearStart(number);
+            };
+            Canvas.SetLeft(badge, centerX - badge.Width / 2);
+            Canvas.SetTop(badge, centerY - badge.Height / 2);
+            MapPreviewOverlay.Children.Add(badge);
+
+            if (owner == null) continue;
+
+            var label = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0xD0, 0x0B, 0x0F, 0x14)),
+                BorderBrush = ownerBrush ?? Theme.StrokeB,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(6, 2, 6, 2),
+                IsHitTestVisible = false,
+                Child = new TextBlock
+                {
+                    Text = string.IsNullOrWhiteSpace(owner.Name) ? L10n.T("ИГРОК") : owner.Name,
+                    FontSize = 11,
+                    Foreground = ownerBrush ?? Theme.TextPrimaryB
+                }
+            };
+            label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var labelWidth = label.DesiredSize.Width;
+            var labelHeight = label.DesiredSize.Height;
+            var labelX = centerX + 17;
+            if (labelX + labelWidth > imageOrigin.X + imageWidth) labelX = centerX - 17 - labelWidth;
+            Canvas.SetLeft(label, labelX);
+            Canvas.SetTop(label, centerY - labelHeight / 2);
+            MapPreviewOverlay.Children.Add(label);
+        }
+    }
+
+    private void ShowStartPopup(FrameworkElement target, int start)
+    {
+        CloseStartPopup();
+
+        var panel = new StackPanel { MinWidth = 150 };
+        var colors = LauncherCore.SkirmishColors();
+        foreach (var (player, index) in _cfg.Skirmish.Players.Select((p, i) => (p, i)))
+        {
+            var foreground = player.Color >= 0 && player.Color < colors.Count
+                ? ParseRgb(colors[player.Color].Rgb)
+                : Theme.TextPrimaryB;
+            var selected = player.Start == start;
+            var normal = selected
+                ? new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF))
+                : Brushes.Transparent;
+
+            var item = new Border
+            {
+                Padding = new Thickness(10, 5, 10, 5),
+                Background = normal,
+                Cursor = Cursors.Hand,
+                Child = new TextBlock
+                {
+                    Text = $"{index + 1}. {(string.IsNullOrWhiteSpace(player.Name) ? L10n.T("ИГРОК") : player.Name)}",
+                    FontSize = 12,
+                    Foreground = foreground
+                }
+            };
+            item.MouseEnter += (_, _) => item.Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+            item.MouseLeave += (_, _) => item.Background = normal;
+            item.MouseLeftButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                AssignStart(player, start);
+                CloseStartPopup();
+            };
+            panel.Children.Add(item);
+        }
+
+        var popup = new Popup
+        {
+            StaysOpen = false,
+            AllowsTransparency = true,
+            Placement = PlacementMode.Mouse,
+            PlacementTarget = target,
+            Child = new Border
+            {
+                Background = Theme.WindowBgB,
+                BorderBrush = Theme.StrokeB,
+                BorderThickness = new Thickness(1),
+                Child = panel
+            }
+        };
+        popup.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_startPopup, popup)) _startPopup = null;
+        };
+        _startPopup = popup;
+        popup.IsOpen = true;
+    }
+
+    private void CloseStartPopup()
+    {
+        var popup = _startPopup;
+        _startPopup = null;
+        if (popup != null) popup.IsOpen = false;
+    }
+
+    /// <summary>Gives a start position to one player, freeing it from another.</summary>
+    private void AssignStart(SkirmishPlayer player, int start)
+    {
+        foreach (var other in _cfg.Skirmish.Players)
+            if (!ReferenceEquals(other, player) && other.Start == start)
+                other.Start = 0;
+        player.Start = start;
+        SaveSkirmishState();
+        BuildPlayerTable();
+        UiSfx.PlayTick();
+    }
+
+    /// <summary>Right click on a marker: the position becomes "Random".</summary>
+    private void ClearStart(int start)
+    {
+        var changed = false;
+        foreach (var player in _cfg.Skirmish.Players)
+        {
+            if (player.Start != start) continue;
+            player.Start = 0;
+            changed = true;
+        }
+        if (!changed) return;
+        SaveSkirmishState();
+        BuildPlayerTable();
+        UiSfx.PlayTick();
+    }
+
+    private static SolidColorBrush ParseRgb(string rgb)
+    {
+        var parts = rgb.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 3 ||
+            !byte.TryParse(parts[0], out var r) ||
+            !byte.TryParse(parts[1], out var g) ||
+            !byte.TryParse(parts[2], out var b))
+            return Theme.TextPrimaryB;
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
     }
 
 
@@ -1995,14 +2448,34 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Saves the skirmish screen state (map, options, players, tab, mode).</summary>
-    private void SaveSkirmishState()
+    /// <remarks>Writes are debounced to keep typing and rapid clicks responsive.</remarks>
+    private void SaveSkirmishState(bool flush = false)
     {
-        try
+        _cfg.Skirmish.SelectedMode = _currentMapMode;
+        if (flush)
         {
-            _cfg.Skirmish.SelectedMode = _currentMapMode;
-            LauncherCore.SaveConfig(_cfg);
+            _skirmishSaveTimer?.Stop();
+            _skirmishSavePending = false;
+            try { LauncherCore.SaveConfig(_cfg); }
+            catch (Exception ex) { LauncherLog.Error("Failed to save the skirmish state", ex); }
+            return;
         }
-        catch { }
+
+        _skirmishSavePending = true;
+        if (_skirmishSaveTimer == null)
+        {
+            _skirmishSaveTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(400) };
+            _skirmishSaveTimer.Tick += (_, _) =>
+            {
+                _skirmishSaveTimer!.Stop();
+                if (!_skirmishSavePending) return;
+                _skirmishSavePending = false;
+                try { LauncherCore.SaveConfig(_cfg); }
+                catch (Exception ex) { LauncherLog.Error("Failed to save the skirmish state", ex); }
+            };
+        }
+        _skirmishSaveTimer.Stop();
+        _skirmishSaveTimer.Start();
     }
 
     private sealed class MapModeItem
@@ -2020,7 +2493,7 @@ public partial class MainWindow : Window
         items.Add(new MapModeItem { Key = MapCatalog.OtherMapsMode, Label = L10n.T("Прочие") });
 
         CmbMapMode.ItemsSource = items;
-        var resolved = _mapCatalog.ResolveMode(_cfg.Skirmish.SelectedMode, _cfg.Skirmish.SelectedMap);
+        var resolved = _mapCatalog.ResolveMode(_cfg.Skirmish.SelectedMode, SelectedMapPath());
         _currentMapMode = resolved;
         _cfg.Skirmish.SelectedMode = resolved;
         CmbMapMode.SelectedItem = items.FirstOrDefault(i => i.Key == resolved) ?? items.FirstOrDefault(i => i.Key == "Battle") ?? items[0];
@@ -2029,7 +2502,7 @@ public partial class MainWindow : Window
     private void RefreshMaps()
     {
         if (MapList == null) return;
-        var selectedPath = (MapList.SelectedItem as MapEntry)?.FilePath ?? _cfg.Skirmish.SelectedMap;
+        var selectedPath = (MapList.SelectedItem as MapEntry)?.FilePath ?? SelectedMapPath();
         var source = _mapCatalog.MapsForMode(_currentMapMode);
         var filtered = source.Where(MapMatchesFilter).ToList();
 
@@ -2126,7 +2599,7 @@ public partial class MainWindow : Window
 
     private void ShowMapDetails(MapEntry m)
     {
-        _cfg.Skirmish.SelectedMap = m.FilePath;
+        _cfg.Skirmish.SelectedMap = m.Relative;
         _cfg.Skirmish.SelectedMode = _currentMapMode;
         if (!_syncing) SaveSkirmishState();
 
@@ -2155,6 +2628,7 @@ public partial class MainWindow : Window
             MapPreview.Visibility = Visibility.Collapsed;
             MapPreviewEmpty.Text = L10n.T("Превью нет: рядом с картой не найден .png");
             MapPreviewEmpty.Visibility = Visibility.Visible;
+            UpdateStartMarkers();
             return;
         }
 
@@ -2166,6 +2640,8 @@ public partial class MainWindow : Window
             MapPreview.Source = bmp;
             MapPreview.Visibility = Visibility.Visible;
             MapPreviewEmpty.Visibility = Visibility.Collapsed;
+            UpdateStartMarkers();
+            Dispatcher.BeginInvoke(new Action(UpdateStartMarkers));
         }
         catch
         {
@@ -2173,6 +2649,7 @@ public partial class MainWindow : Window
             MapPreview.Visibility = Visibility.Collapsed;
             MapPreviewEmpty.Text = L10n.T("Превью не читается");
             MapPreviewEmpty.Visibility = Visibility.Visible;
+            UpdateStartMarkers();
         }
     }
 
@@ -2196,6 +2673,7 @@ public partial class MainWindow : Window
 
     private void BtnStartSkirmish_Click(object sender, RoutedEventArgs e)
     {
+        SaveSkirmishState(flush: true);
         UpdateStartButtonState();
         if (GetStartBlockReason() != null) return;
         if (LauncherCore.IsGameProcessRunning(_cfg))
@@ -2203,43 +2681,78 @@ public partial class MainWindow : Window
             ShowNotice(L10n.T("Запуск"), L10n.T("Игра уже запущена. Закройте текущий процесс игры перед новым запуском."));
             return;
         }
-        LaunchGameSafe();
+
+        var map = CurrentMapEntry();
+        if (map == null)
+        {
+            SkirmishStatus.Text = L10n.T("Выберите карту.");
+            return;
+        }
+
+        if (!LauncherCore.Exists("CnCNet-Spawner.dll") ||
+            (!LauncherCore.Exists("gamemd-spawn.exe") && !LauncherCore.Exists(_cfg.Gamemd)))
+        {
+            ShowNotice(L10n.T("ОШИБКА ЗАПУСКА"),
+                L10n.T("Для прямого запуска боя не найден gamemd-spawn.exe или CnCNet-Spawner.dll."));
+            return;
+        }
+
+        LaunchGameSafe(map);
     }
 
-    private void LaunchGameSafe()
+    private void LaunchGameSafe(MapEntry map)
     {
         try
         {
+            LauncherLog.Section("skirmish launch");
+            LauncherLog.Step("skirmish", $"map = {map.Relative ?? map.FilePath} ({map.Name})");
+            LauncherLog.Step("skirmish", $"players = {string.Join(", ", _cfg.Skirmish.Players.Select(p => (p.IsHuman ? "human:" : "ai:") + p.Name))}");
+
+            var modConflict = AiModConflictWarning();
+            if (modConflict != null) LauncherLog.Warn("active mod conflict: " + modConflict);
+
             LauncherCore.SaveActiveIds(_mods, _active, _cfg);
             LauncherCore.ApplySkirmishGameSpeed(_cfg.Skirmish.Options);
-            var started = LauncherCore.LaunchGame(_cfg);
-            var name = GameProcessName();
-            SkirmishStatus.Text = L10n.F("Запуск: {0}. Карта и бой — в скирмиш-меню игры.", name);
+            SkirmishSpawn.Write(_cfg.Skirmish, map);
+
+            var mapName = string.IsNullOrWhiteSpace(map.DisplayName) ? map.Name : map.DisplayName;
+            var aiSummary = string.Join(", ", _cfg.Skirmish.Players
+                .Where(p => !p.IsHuman)
+                .Select(p => AiDifficultyName(p.AiLevel)));
+            if (aiSummary.Length == 0) aiSummary = "—";
+            SkirmishStatus.Text = L10n.F("Запуск: {0} · ИИ: {1}.", mapName, aiSummary);
+
+            var started = LauncherCore.LaunchSpawnedGame(_cfg);
+            var gameProcess = Path.GetFileNameWithoutExtension(
+                LauncherCore.Exists("gamemd-spawn.exe") ? "gamemd-spawn.exe" : LauncherCore.GameProcessName(_cfg));
+            _ = WatchMissionLaunchAsync(started, gameProcess, mapName);
 
             if (LauncherCore.WantsLuaApi(_cfg))
             {
                 var dll = Path.Combine(LauncherCore.Root, "LuaAPI.dll");
-                var process = LauncherCore.GameProcessName(_cfg);
-                _ = LuaApiInjector.InjectWhenGameStartsAsync(started, dll, process)
+                _ = LuaApiInjector.InjectWhenGameStartsAsync(started, dll, gameProcess)
                     .ContinueWith(t =>
                     {
                         var error = t.IsCompletedSuccessfully ? t.Result : t.Exception?.GetBaseException().Message;
                         if (string.IsNullOrEmpty(error)) return;
+                        LauncherLog.Error("LuaAPI injection failed: " + error);
                         Dispatcher.Invoke(() => SkirmishStatus.Text = error);
                     }, TaskScheduler.Default);
             }
         }
         catch (Exception ex)
         {
+            LauncherLog.Error("Launch failed", ex);
             ShowError(L10n.T("Произошла ошибка."), ex);
         }
     }
 
-    private string GameProcessName()
+    private static string AiDifficultyName(int level) => level switch
     {
-        var (sOk, _) = LauncherCore.CheckExe(_cfg.Syringe);
-        return Path.GetFileName(sOk ? _cfg.Syringe : _cfg.Gamemd);
-    }
+        0 => L10n.T("Легкая"),
+        2 => L10n.T("Сложная"),
+        _ => L10n.T("Средняя")
+    };
 
     private void BtnSkirmishBack_Click(object sender, RoutedEventArgs e) => ShowMain();
 
@@ -2263,7 +2776,15 @@ public partial class MainWindow : Window
 
         settings.DetailLevel = Math.Max(0, CmbDetail.SelectedIndex);
         settings.Difficulty = Math.Max(0, CmbDifficulty.SelectedIndex);
-        if (CmbGameSpeed.SelectedItem is int speed) settings.GameSpeed = speed;
+        if (CmbGameSpeed.SelectedItem is int speed)
+        {
+            settings.GameSpeed = speed;
+            // The skirmish screen applies its own speed at launch, so the
+            // value the player picks here has to go there as well - otherwise
+            // the game silently runs at a different speed than the one that
+            // was just chosen.
+            _cfg.Skirmish.Options.GameSpeed = speed;
+        }
         if (CmbRenderer.SelectedItem is KeyValuePair<string, string> renderer) settings.Renderer = renderer.Key;
 
         var windowed = ChkWindowed.IsChecked == true;
@@ -2418,6 +2939,35 @@ public partial class MainWindow : Window
 
     private void BtnCfgBack_Click(object sender, RoutedEventArgs e) => TryLeaveOptions();
     private void BtnStatsBack_Click(object sender, RoutedEventArgs e) => ShowMain();
+
+    /// <summary>
+    /// Collects the launcher log, the tail of the LuaAPI log and the current
+    /// configuration into one file next to the game, and puts the same text on
+    /// the clipboard so it can be attached to a report.
+    /// </summary>
+    private void BtnStatsDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var text = LauncherDiagnostics.Build(_cfg, _mods, _active);
+            var path = LauncherDiagnostics.WriteToFile(text);
+            if (string.IsNullOrEmpty(path))
+            {
+                ShowNotice(L10n.T("Ошибка"), L10n.T("Не удалось сохранить диагностику."));
+                return;
+            }
+
+            try { Clipboard.SetText(text); }
+            catch (Exception ex) { LauncherLog.Warn("Could not copy the diagnostics to the clipboard: " + ex.Message); }
+
+            LauncherLog.Info("Diagnostics collected: " + path);
+            ShowNotice(L10n.T("Диагностика"), L10n.F("Диагностика сохранена: {0}", path), showOpenLog: true);
+        }
+        catch (Exception ex)
+        {
+            ShowError(L10n.T("Не удалось сохранить диагностику."), ex);
+        }
+    }
 
     private static List<string> SplitArgs(string s) =>
         s.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();

@@ -89,7 +89,13 @@ public static class L10n
         ["ОПИСАНИЕ МИССИИ"] = "MISSION DESCRIPTION",
         ["СЛОЖНОСТЬ"] = "DIFFICULTY",
         ["ЗАПУСТИТЬ МИССИЮ"] = "START MISSION",
-        ["Альянс"] = "Allied",
+        // Фракции мода: эти же строки приходят из rulesmd.ini ([Factions]),
+        // поэтому в EN-режиме названия фракций переводятся здесь.
+        ["Альянс"] = "Alliance",
+        ["Евросоюз"] = "European Union",
+        ["Хаванский пакт"] = "Havana Pact",
+        ["Россия"] = "Russia",
+        ["Юрий"] = "Yuri",
         ["Советский Союз"] = "Soviet Union",
         ["Учебный лагерь"] = "Boot Camp",
         ["Опции"] = "Options",
@@ -154,13 +160,16 @@ public static class L10n
         ["ИИ {0}"] = "AI {0}",
         ["Команда {0}"] = "Team {0}",
         ["авто"] = "auto",
-        ["поз. {0}"] = "pos. {0}",
+
         ["Позиции карты не определены"] = "Map start positions could not be determined",
         ["Карта рассчитана на {0} игроков"] = "This map supports up to {0} players",
         ["На этой карте максимум {0} игроков, сейчас {1}. Удалите лишние слоты."] =
             "This map supports up to {0} players, but {1} slots are set. Remove extra slots.",
         ["Одна стартовая позиция выбрана у двух игроков."] =
             "The same start position is selected for two players.",
+        ["Клик по метке — назначить старт игроку. ПКМ — сбросить."] =
+            "Click a marker to assign the start to a player. Right-click to clear.",
+        ["Стартовая позиция {0}"] = "Starting position {0}",
         ["ИГРОВЫЕ ОПЦИИ"] = "GAME OPTIONS",
         ["ПРАВИЛА"] = "RULES",
         ["СТАРТОВЫЕ ДЕНЬГИ"] = "STARTING CREDITS",
@@ -316,6 +325,7 @@ public static class L10n
         // ---- dynamic / notices ----
         ["ОШИБКА"] = "ERROR",
         ["ОШИБКА ЗАПУСКА"] = "LAUNCH ERROR",
+        ["Ошибка запуска"] = "Launch error",
         ["ОБНОВЛЕНИЯ"] = "UPDATES",
         ["СОХРАНЕНО"] = "SAVED",
         ["Редактор карт не найден"] = "Map editor not found",
@@ -338,6 +348,18 @@ public static class L10n
         ["Игра упала при загрузке миссии."] = "The game crashed while loading the mission.",
         ["Для запуска миссии через Syringe не найден gamemd-spawn.exe или CnCNet-Spawner.dll."] =
             "Cannot launch mission via Syringe: gamemd-spawn.exe or CnCNet-Spawner.dll was not found.",
+        ["Запуск: {0} · ИИ: {1}."] = "Launching: {0} · AI: {1}.",
+        ["Легкая"] = "Easy",
+        ["Сложная"] = "Hard",
+        ["Сложность ИИ для этого слота."] = "AI difficulty for this slot.",
+        ["Выберите карту."] = "Select a map.",
+        ["Для этой карты нет распакованного .map/.yrm файла. Выберите другую карту."] =
+            "This map has no unpacked .map/.yrm file. Choose another map.",
+        ["Для этой карты нет распакованного .map/.yrm файла. Выберите карту из списка, у которой есть .map."] =
+            "This map has no unpacked .map/.yrm file. Choose a map that has a .map file.",
+        ["Для прямого запуска боя не найден gamemd-spawn.exe или CnCNet-Spawner.dll."] =
+            "Cannot launch the battle directly: gamemd-spawn.exe or CnCNet-Spawner.dll was not found.",
+        ["Добавьте хотя бы один ИИ-слот."] = "Add at least one AI slot.",
         ["CnCNet client"] = "CnCNet client",
         ["Открывает клиент CnCNet (онлайн и LAN)."] = "Opens the CnCNet client (online and LAN).",
         ["Карты не найдены в корне игры и в Maps\\."] = "No maps found in the game root or Maps\\.",
@@ -476,6 +498,13 @@ public static class L10n
         ["Переключатель канала ниже меняет только канал обновлений CnCNet (updateconfig.ini). После смены канала может потребоваться перезапуск клиента/апдейтера."] = "The channel selector below only changes the CnCNet update channel (updateconfig.ini). A client/updater restart may be required after changing the channel.",
         ["Каналы Pre-release и Dev предназначены для тестирования: возможны ошибки. Сообщая о проблеме, указывайте выбранный канал."] = "Pre-release and Dev channels are intended for testing: errors are possible. When reporting an issue, mention the selected channel.",
         ["Этот цвет уже выбран другим игроком."] = "This color is already selected by another player.",
+        ["СОБРАТЬ ДИАГНОСТИКУ"] = "COLLECT DIAGNOSTICS",
+        ["КОНФЛИКТ МОДОВ"] = "MOD CONFLICT",
+        ["Диагностика"] = "Diagnostics",
+        ["ошибок"] = "errors",
+        ["предупреждений"] = "warnings",
+        ["Диагностика сохранена: {0}"] = "Diagnostics saved: {0}",
+        ["Не удалось сохранить диагностику."] = "Could not save the diagnostics.",
     };
 
     private static readonly ConditionalWeakTable<DependencyObject, string> Keys = new();

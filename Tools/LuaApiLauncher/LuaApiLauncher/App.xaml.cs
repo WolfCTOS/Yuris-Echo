@@ -19,14 +19,31 @@ public partial class App : Application
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("kernel32.dll")] private static extern bool AttachConsole(int dwProcessId);
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     private const int SW_RESTORE = 9;
     private const int SW_SHOW = 5;
+    private const int ATTACH_PARENT_PROCESS = -1;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         LauncherLog.Init();
         HookGlobalExceptions();
+
+        // The game reads its INI files as ANSI (CP1251 for a Russian install).
+        // The provider has to be registered once for the whole process.
+        try { Encoding.RegisterProvider(CodePagesEncodingProvider.Instance); }
+        catch (Exception ex) { LauncherLog.Warn("Could not register the ANSI code pages: " + ex.Message); }
+
+        // "--diagnostics" collects the logs and the configuration into a file
+        // and exits. It is the way to hand a report over from a script, and
+        // it works without a window.
+        if (e.Args.Any(a => string.Equals(a, "--diagnostics", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunDiagnostics();
+            Shutdown(0);
+            return;
+        }
 
         // Single instance: prevent concurrent config writes and double launches.
         var mutexName = @"Local\YurisEcho_Launcher_SingleInstance";
@@ -52,6 +69,16 @@ public partial class App : Application
             UiSfx.Enabled = cfg.UiSoundsEnabled;
             UiSfx.Install();
 
+            // The state of the installation is written to the log right away:
+            // if the launcher never gets as far as the launch button, this is
+            // the only record of what it saw.
+            LauncherLog.Section("startup");
+            LauncherLog.Step("startup", $"root = {LauncherCore.Root}");
+            LauncherLog.Step("startup", $"game = {(LauncherCore.Exists(cfg.Gamemd) ? "found" : "MISSING")}, " +
+                                         $"syringe = {(LauncherCore.Exists(cfg.Syringe) ? "found" : "MISSING")}, " +
+                                         $"luaapi = {(LauncherCore.Exists("LuaAPI.dll") ? "found" : "MISSING")}");
+            LauncherLog.Step("startup", $"language = {cfg.Language}, active mods = {cfg.ActiveMods.Count}");
+
             base.OnStartup(e);
 
             var window = new MainWindow();
@@ -64,6 +91,35 @@ public partial class App : Application
             ShowFatal(ex, L10n.T("Не удалось запустить лаунчер."));
             Shutdown(-1);
         }
+    }
+
+    /// <summary>
+    /// Writes the diagnostics bundle next to the game and prints the path to
+    /// the console the launcher was started from, when there is one.
+    /// </summary>
+    private static void RunDiagnostics()
+    {
+        string path = "";
+        try
+        {
+            var cfg = LauncherCore.LoadConfig();
+            var mods = LauncherCore.ScanMods();
+            var text = LauncherDiagnostics.Build(cfg, mods, cfg.ActiveMods);
+            path = LauncherDiagnostics.WriteToFile(text);
+            LauncherLog.Info("Diagnostics written to " + path);
+        }
+        catch (Exception ex)
+        {
+            LauncherLog.Error("Diagnostics collection failed", ex);
+        }
+
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            AttachConsole(ATTACH_PARENT_PROCESS);
+            Console.WriteLine(path);
+        }
+        catch { }
     }
 
     protected override void OnExit(ExitEventArgs e)

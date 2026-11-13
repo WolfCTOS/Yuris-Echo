@@ -3,8 +3,9 @@
 Gameplay mod for **Command & Conquer: Red Alert 2 — Yuri's Revenge**.
 Built on Ares, Phobos and LuaAPI.
 
-**Latest change: Faction split of the Western roster, Alliance/EU doctrines and
-a batch of rules repairs (see below).**
+**Latest change: the skirmish setup reads its country list from
+`rulesmd.ini`, the playable countries of the mod are back in the lobby, and
+the rules checker knows the lobby (see below).**
 
 ## Contents
 
@@ -49,8 +50,40 @@ now enter the machine itself (`Occupier=yes`); the tank destroyer uses the
 sabot round `SABOT` (`UltraAP`) to strip the crew out of a tank, so infantry
 can take it over.
 
+### Playable factions
+
+The skirmish setup offers the factions of `rulesmd.ini`: the launcher reads
+the `[Factions]` section and shows one entry per faction, in the order of the
+section. The value of an entry lists the houses of the faction - the first one
+is the country the player gets, the rest are the other houses of the same
+coalition (Korea in the Alliance, France and Germany in the EU, Cuba in the
+Havana Pact). The spawner identifies a house by its index in the rules'
+`[Countries]` table, so the list follows the rules instead of a hardcoded
+client list - edit the rules and the launcher follows.
+
+| Faction | Houses | Coalition |
+|---|---|---|
+| Альянс / Alliance | `Americans` + `Alliance` | USA + Korea |
+| Евросоюз / European Union | `British` + `French` + `Germans` | Europe |
+| Хаванский пакт / Havana Pact | `Africans` + `Confederation` | Libya + Cuba |
+| Россия / Russia | `Russians` | Soviet Union |
+| Юрий / Yuri | `YuriCountry` | outside the coalitions |
+
+The names of the factions come from the rules as well; the launcher
+translates them for the English UI (`Localization.cs`).
+
 ### Repairs in this batch
 
+- The European Union, Korea, France, Germany and Libya are playable again
+  (`Multiplay=yes`). Until now their houses were not in the lobby, and their
+  units keep their `RequiredHouses` - so the sniper, Grizzly, tank destroyer,
+  Prism, Mirage, Battle Fortress, destroyer, cruiser, dolphin and the Grand
+  Cannon could not be built by anybody at all.
+- `[LUNR]` (the Soviet sniper) had `Prerequisite=NAPILE`, a section that does
+  not exist in the file, so the unit could not be built. It is `NAHAND,RADAR`
+  now.
+- The Robot Tank belongs to Korea as well: `Alliance` was added to its `Owner`
+  and `RequiredHouses`.
 - `[InfantryTypes] 25=TANY` pointed at a section that had been renamed to
   `[TANYA]`, so the Tanya infantry loaded with no data at all (game log:
   `TANYA not found`, `TANY Occupier=0`). The section is `[TANY]` again and
@@ -61,9 +94,10 @@ can take it over.
   Rhino and Lasher elite guns and others. They are registered now
   (`108`..`125`), and the missing `[CComandoATWH]` and `[Meteorite]`
   sections were added.
-- `[CCOMAND]` had `Prerequisite=BARRACKS`, a section that does not exist
-  anywhere in the file, so the Chrono Commando could not be built at all.
-  It is `GAPILE,GATECH` now and belongs to the Alliance.
+- `[CCOMAND]` had `Prerequisite=BARRACKS`. That is a retail generic group
+  (like `POWER`, `FACTORY`, `RADAR`, `TECH` and `PROC`), so the unit was
+  buildable from the barracks; it is `GAPILE,GATECH` now (Battle Lab) and
+  belongs to the Alliance.
 - `[AM1]` and `[AM2]` listed `Americans` in `Owner` and in `ForbiddenHouses`
   at the same time, so the Alliance could not build them. `ForbiddenHouses`
   was dropped, `RequiredHouses=Americans,Alliance` was added, and AM2 was
@@ -87,7 +121,13 @@ can take it over.
 `Tools\rules_check.ps1` verifies exactly what breaks when a rules file is
 edited by hand: every index list entry resolves to a section, every weapon
 warhead is registered, every unit is reachable by a lobby country,
-`RequiredHouses` is a subset of `Owner`, and the file stays UTF-8/CRLF.
+`RequiredHouses` is a subset of `Owner`, every prerequisite names a building
+or a retail group, and the file stays UTF-8/CRLF.
+
+The lobby is the rules' own country table - the countries of `[Countries]`
+whose house section says `Multiplay=yes` - so the check fails when a unit's
+`RequiredHouses` keep it away from every country a player can pick. That is
+exactly how the European Union roster became unbuildable.
 
 ```powershell
 .\Tools\rules_check.ps1

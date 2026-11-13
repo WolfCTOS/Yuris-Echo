@@ -273,7 +273,7 @@ public static class CampaignData
     /// Resources\GameOptions.ini [ForcedSpawnIniOptions] - the options the
     /// CnCNet client writes into every spawn.ini.
     /// </summary>
-    private static IEnumerable<(string Key, string Value)> ReadForcedSpawnIniOptions()
+    internal static IEnumerable<(string Key, string Value)> ReadForcedSpawnIniOptions()
     {
         var ini = IniFile.Load(Path.Combine(LauncherCore.Root, "Resources", "GameOptions.ini"));
         foreach (var (key, value) in ini.Section("ForcedSpawnIniOptions"))
@@ -283,7 +283,7 @@ public static class CampaignData
         }
     }
 
-    private static string SanitizeUiName(string value)
+    internal static string SanitizeUiName(string value)
     {
         if (string.IsNullOrWhiteSpace(value)) return "Mission";
         var sb = new StringBuilder(value.Length);

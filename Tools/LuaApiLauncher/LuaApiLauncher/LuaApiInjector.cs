@@ -30,9 +30,15 @@ internal static class LuaApiInjector
     public static async Task<string?> InjectWhenGameStartsAsync(
         DateTime sinceUtc, string dllPath, string processName, int timeoutMs = 30000)
     {
-        if (!File.Exists(dllPath)) return null;
+        if (!File.Exists(dllPath))
+        {
+            LauncherLog.Warn("LuaAPI.dll not found, nothing to inject: " + dllPath);
+            return null;
+        }
 
+        LauncherLog.Step("inject", $"waiting for {processName}.exe (timeout {timeoutMs} ms), dll = {dllPath}");
         var deadline = Environment.TickCount64 + timeoutMs;
+        var polls = 0;
         while (Environment.TickCount64 < deadline)
         {
             var pid = FindGameProcess(processName, sinceUtc);
@@ -40,10 +46,20 @@ internal static class LuaApiInjector
             {
                 // Let the process finish its loader work before touching it.
                 await Task.Delay(150).ConfigureAwait(false);
-                return Inject(id, dllPath) ? null : L10n.T("Не удалось загрузить LuaAPI.dll в игру.");
+                LauncherLog.Step("inject", $"{processName}.exe found, pid={id}");
+                var (ok, reason) = Inject(id, dllPath);
+                if (ok)
+                {
+                    LauncherLog.Step("inject", "LuaAPI.dll loaded");
+                    return null;
+                }
+                LauncherLog.Error($"Injection into pid {id} failed: {reason}");
+                return L10n.T("Не удалось загрузить LuaAPI.dll в игру.");
             }
+            polls++;
             await Task.Delay(120).ConfigureAwait(false);
         }
+        LauncherLog.Error($"{processName}.exe did not start within {timeoutMs} ms ({polls} polls)");
         return L10n.T("gamemd.exe не запустился: LuaAPI не загружен.");
     }
 
@@ -72,31 +88,34 @@ internal static class LuaApiInjector
         return result;
     }
 
-    private static bool Inject(int pid, string dllPath)
+    private static (bool ok, string? reason) Inject(int pid, string dllPath)
     {
         var proc = OpenProcess(ProcessAllAccess, false, pid);
-        if (proc == IntPtr.Zero) return false;
+        if (proc == IntPtr.Zero) return (false, $"OpenProcess failed (error {Marshal.GetLastWin32Error()})");
 
         try
         {
             var loadLibrary = ResolveLoadLibraryW(proc);
-            if (loadLibrary == IntPtr.Zero) return false;
+            if (loadLibrary == IntPtr.Zero) return (false, "LoadLibraryW could not be resolved in the target process");
 
             var bytes = Encoding.Unicode.GetBytes(dllPath + "\0");
             var mem = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)bytes.Length, MemCommitReserve, PageReadWrite);
-            if (mem == IntPtr.Zero) return false;
+            if (mem == IntPtr.Zero) return (false, $"VirtualAllocEx failed (error {Marshal.GetLastWin32Error()})");
 
             try
             {
-                if (!WriteProcessMemory(proc, mem, bytes, (UIntPtr)bytes.Length, out _)) return false;
+                if (!WriteProcessMemory(proc, mem, bytes, (UIntPtr)bytes.Length, out _))
+                    return (false, $"WriteProcessMemory failed (error {Marshal.GetLastWin32Error()})");
 
                 var thread = CreateRemoteThread(proc, IntPtr.Zero, UIntPtr.Zero, loadLibrary, mem, 0, out _);
-                if (thread == IntPtr.Zero) return false;
+                if (thread == IntPtr.Zero) return (false, $"CreateRemoteThread failed (error {Marshal.GetLastWin32Error()})");
 
                 try
                 {
-                    if (WaitForSingleObject(thread, 15000) != 0) return false;
-                    return GetExitCodeThread(thread, out var exit) && exit != 0;
+                    if (WaitForSingleObject(thread, 15000) != 0) return (false, "the remote thread did not finish in 15 s");
+                    if (!GetExitCodeThread(thread, out var exit)) return (false, "GetExitCodeThread failed");
+                    if (exit == 0) return (false, "LoadLibraryW returned 0 in the target process");
+                    return (true, null);
                 }
                 finally { CloseHandle(thread); }
             }

@@ -4,8 +4,14 @@
     Catches the class of bugs that rules editing produces by hand:
     an index list entry whose section was renamed, a weapon pointing at a
     warhead that was never registered, a unit no lobby country can build,
-    a RequiredHouses list that the Owner list does not contain, and
-    encoding / line-ending damage.
+    a RequiredHouses list that the Owner list does not contain, a prerequisite
+    that names nothing, and encoding / line-ending damage.
+
+    The lobby is the rules' own country table: the countries of [Countries]
+    whose house section is marked Multiplay=yes. The launcher offers exactly
+    those countries and the spawner writes their indexes into spawn.ini, so a
+    unit whose RequiredHouses keep it away from every lobby country can never
+    be built by anyone.
 
     Usage:
         .\Tools\rules_check.ps1                      # checks .\rulesmd.ini
@@ -58,6 +64,7 @@ $known = @{
                          'V17', 'V18', 'DUMMY13', 'DUMMY14', 'FENC', 'DUMMY15',
                          'DUMMYOLD', 'USELESS', 'GAWRONG')
 }
+
 $lists = @('InfantryTypes', 'VehicleTypes', 'Warheads', 'AircraftTypes',
            'BuildingTypes', 'SuperWeaponTypes', 'TerrainTypes', 'SmudgeTypes',
            'OverlayTypes', 'AttachEffectTypes')
@@ -106,33 +113,77 @@ if ($unreg.Count -gt 0) {
     Write-Output ("[ OK ] warheads: " + $used.Count + " used, all registered")
 }
 
-# --- ownership: a lobby country must be able to build every unit -------------
-$lobby = @('Americans', 'Russians', 'Confederation', 'Arabs', 'YuriCountry')
-$cur = ''; $owner = ''; $req = ''
-$orphans = @(); $badreq = @()
-function Flush($c, $o, $r) {
-    if ($c -eq '' -or $o -eq '') { return }
-    $oh = @($o -split ',' | ForEach-Object { $_.Trim() })
-    if ($r -eq '') {
-        $hit = $false
-        foreach ($h in $oh) { if ($lobby -contains $h) { $hit = $true } }
-        if (-not $hit) { $script:orphans += $c }
-    } else {
-        $rh = @($r -split ',' | ForEach-Object { $_.Trim() })
-        $hit = $false
-        foreach ($h in $rh) { if ($oh -contains $h) { $hit = $true } }
-        if (-not $hit) { $script:badreq += ($c + ' Req=[' + $r + '] Owner=[' + $o + ']') }
+# --- house sections: the keys the ownership rules need ----------------------
+$houseInfo = @{}
+$cur = ''
+for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -match '^\s*\[([^\]]+)\]') { $cur = $Matches[1].Trim(); continue }
+    if (-not $cur) { continue }
+    $v = (Strip-Comment $lines[$i]).Trim()
+    if ($v -notmatch '^([^=]+)=(.*)$') { continue }
+    $k = $Matches[1].Trim(); $val = $Matches[2].Trim()
+    if ($k -notin @('Owner', 'RequiredHouses', 'ForbiddenHouses', 'Multiplay', 'Prerequisite')) { continue }
+    if (-not $houseInfo.ContainsKey($cur)) { $houseInfo[$cur] = @{} }
+    if (-not $houseInfo[$cur].ContainsKey($k)) { $houseInfo[$cur][$k] = $val }
+}
+
+# --- the lobby: countries of [Countries] whose house is Multiplay=yes -------
+$passive = @('GDI', 'Nod', 'Neutral', 'Special', 'Observer')
+$countryHouses = @()
+$inCountries = $false
+for ($i = 0; $i -lt $lines.Count; $i++) {
+    $t = $lines[$i].Trim()
+    if ($t -match '^\[') { $inCountries = ($t -eq '[Countries]'); continue }
+    if (-not $inCountries) { continue }
+    $v = (Strip-Comment $lines[$i]).Trim()
+    if ($v -match '^\d+\s*=\s*(.+)$') {
+        $h = $Matches[1].Trim()
+        if ($passive -notcontains $h) { $countryHouses += $h }
     }
 }
-for ($i = 0; $i -lt $lines.Count; $i++) {
-    $v = (Strip-Comment $lines[$i]).Trim()
-    if ($lines[$i] -match '^\s*\[([^\]]+)\]') {
-        Flush $cur $owner $req
-        $cur = $Matches[1].Trim(); $owner = ''; $req = ''
-    } elseif ($v -match '^Owner\s*=\s*(.+)$') { $owner = $Matches[1].Trim() }
-    elseif ($v -match '^RequiredHouses\s*=\s*(.+)$') { $req = $Matches[1].Trim() }
+$lobby = @($countryHouses | Where-Object {
+    $houseInfo.ContainsKey($_) -and $houseInfo[$_].ContainsKey('Multiplay') -and
+    $houseInfo[$_]['Multiplay'] -match '^(?i)yes$'
+})
+Write-Output ("lobby countries: " + ($lobby -join ', '))
+
+function Test-Buildable([string]$section, [string]$house) {
+    if (-not $houseInfo.ContainsKey($section)) { return $true }
+    $info = $houseInfo[$section]
+    $owner = @()
+    if ($info.ContainsKey('Owner')) { $owner = @($info['Owner'] -split ',' | ForEach-Object { $_.Trim() }) }
+    if ($owner.Count -eq 0) { return $true }
+    if ($owner -notcontains $house) { return $false }
+    if ($info.ContainsKey('RequiredHouses')) {
+        $req = @($info['RequiredHouses'] -split ',' | ForEach-Object { $_.Trim() })
+        if ($req.Count -gt 0 -and $req -notcontains $house) { return $false }
+    }
+    if ($info.ContainsKey('ForbiddenHouses')) {
+        $forb = @($info['ForbiddenHouses'] -split ',' | ForEach-Object { $_.Trim() })
+        if ($forb -contains $house) { return $false }
+    }
+    return $true
 }
-Flush $cur $owner $req
+
+# --- ownership: a lobby country must be able to build every unit -------------
+$orphans = @(); $badreq = @()
+foreach ($sec in $sections.Keys) {
+    if (-not $houseInfo.ContainsKey($sec)) { continue }
+    if (-not $houseInfo[$sec].ContainsKey('Owner')) { continue }
+    $any = $false
+    foreach ($h in $lobby) {
+        if (Test-Buildable $sec $h) { $any = $true; break }
+    }
+    if (-not $any) { $orphans += $sec }
+    if ($houseInfo[$sec].ContainsKey('RequiredHouses')) {
+        $owner = @($houseInfo[$sec]['Owner'] -split ',' | ForEach-Object { $_.Trim() })
+        $req = @($houseInfo[$sec]['RequiredHouses'] -split ',' | ForEach-Object { $_.Trim() })
+        foreach ($r in $req) {
+            if ($r.Length -eq 0) { continue }
+            if ($owner -notcontains $r) { $badreq += ($sec + ' Req=[' + $houseInfo[$sec]['RequiredHouses'] + '] Owner=[' + $houseInfo[$sec]['Owner'] + ']') }
+        }
+    }
+}
 if ($orphans.Count -gt 0) {
     Write-Output ("[FAIL] no lobby country can build: " + ($orphans -join ', '))
     $problems++
@@ -144,6 +195,54 @@ if ($badreq.Count -gt 0) {
     $problems++
 } else {
     Write-Output '[ OK ] RequiredHouses is a subset of Owner'
+}
+
+# --- the factions of [Factions] must name houses that exist -----------------
+# The launcher offers these factions and gives the player the first house of
+# the chosen one, so a typo in the section would hand out the wrong country.
+$badfaction = @()
+$inFactions = $false
+foreach ($line in $lines) {
+    $t = $line.Trim()
+    if ($t -match '^\[') { $inFactions = ($t -eq '[Factions]'); continue }
+    if (-not $inFactions) { continue }
+    $v = (Strip-Comment $line).Trim()
+    if ($v -notmatch '^([^=]+)=(.*)$') { continue }
+    $fname = $Matches[1].Trim()
+    $houses = @($Matches[2] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
+    if ($houses.Count -eq 0) { $badfaction += ($fname + ' (no houses)'); continue }
+    foreach ($h in $houses) {
+        if ($countryHouses -notcontains $h) { $badfaction += ($fname + ' -> ' + $h) }
+    }
+}
+if ($badfaction.Count -gt 0) {
+    Write-Output ("[FAIL] factions that name no country: " + ($badfaction -join ', '))
+    $problems++
+} else {
+    Write-Output '[ OK ] every faction names countries of the table'
+}
+
+# --- prerequisites must name a building or a retail generic group -----------
+# The retail engine resolves six generic groups (POWER, FACTORY, BARRACKS,
+# RADAR, TECH, PROC) before it looks at the building list, so BARRACKS is a
+# valid prerequisite even though no [BARRACKS] section exists.
+$generic = @('POWER', 'FACTORY', 'BARRACKS', 'RADAR', 'TECH', 'PROC')
+$badprereq = @()
+foreach ($sec in $sections.Keys) {
+    if (-not $houseInfo.ContainsKey($sec)) { continue }
+    if (-not $houseInfo[$sec].ContainsKey('Prerequisite')) { continue }
+    foreach ($tok in @($houseInfo[$sec]['Prerequisite'] -split ',' | ForEach-Object { $_.Trim() })) {
+        if ($tok.Length -eq 0) { continue }
+        if ($sections.ContainsKey($tok)) { continue }
+        if ($generic -contains $tok.ToUpperInvariant()) { continue }
+        $badprereq += ($sec + ' -> ' + $tok)
+    }
+}
+if ($badprereq.Count -gt 0) {
+    Write-Output ("[FAIL] prerequisites that name nothing: " + ($badprereq -join ', '))
+    $problems++
+} else {
+    Write-Output '[ OK ] every prerequisite names a building or a retail group'
 }
 
 # --- encoding / line endings -------------------------------------------------

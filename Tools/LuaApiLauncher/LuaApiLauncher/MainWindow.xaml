@@ -650,8 +650,10 @@
 
                                 <Border Grid.Row="0" Background="#0B0F14" BorderBrush="#343A47" BorderThickness="1"
                                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                                    <Grid>
+                                    <Grid x:Name="MapPreviewHost" ClipToBounds="True">
                                         <Image x:Name="MapPreview" Stretch="Uniform" Margin="2"/>
+                                        <!-- Start-position markers are placed over the rendered image. -->
+                                        <Canvas x:Name="MapPreviewOverlay" Margin="2" ClipToBounds="True"/>
                                         <TextBlock x:Name="MapPreviewEmpty" Text="Превью нет" FontSize="12" Foreground="#8B919D"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Grid>
@@ -1009,6 +1011,7 @@
             <WrapPanel x:Name="StatsCards" Orientation="Horizontal" />
             </ScrollViewer>
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="СОБРАТЬ ДИАГНОСТИКУ" Width="220" Margin="0,0,10,0" Style="{StaticResource SmallButton}" Click="BtnStatsDiagnostics_Click" />
             <Button Content="НАЗАД" Width="120" Style="{StaticResource SmallButton}" Click="BtnStatsBack_Click" />
             </StackPanel>
             </Grid>

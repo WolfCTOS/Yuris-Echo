@@ -30,6 +30,11 @@ public sealed class MapCatalog
         public List<MapEntry> Maps { get; set; } = new();
     }
 
+    private static readonly object _loadGate = new();
+    private static MapCatalog? _loaded;
+    private static long _loadedTicks;
+    private static long _loadedSize;
+
     public static MapCatalog Load()
     {
         var mpMapsPath = Path.Combine(LauncherCore.Root, "INI", "MPMaps.ini");
@@ -39,26 +44,40 @@ public sealed class MapCatalog
         var ticks = fi?.LastWriteTimeUtc.Ticks ?? 0;
         var size = fi?.Length ?? 0;
 
-        try
+        lock (_loadGate)
         {
-            if (File.Exists(cachePath))
+            if (_loaded != null && _loadedTicks == ticks && _loadedSize == size)
+                return _loaded;
+
+            try
             {
-                var cache = JsonSerializer.Deserialize<CacheFile>(File.ReadAllText(cachePath), JRead);
-                if (cache != null && cache.MpMapsTicks == ticks && cache.MpMapsSize == size && cache.Maps.Count > 0)
-                    return Build(cache.Modes, cache.Maps);
+                if (File.Exists(cachePath))
+                {
+                    var cache = JsonSerializer.Deserialize<CacheFile>(File.ReadAllText(cachePath), JRead);
+                    if (cache != null && cache.MpMapsTicks == ticks && cache.MpMapsSize == size && cache.Maps.Count > 0)
+                    {
+                        _loaded = Build(cache.Modes, cache.Maps);
+                        _loadedTicks = ticks;
+                        _loadedSize = size;
+                        return _loaded;
+                    }
+                }
             }
-        }
-        catch { }
+            catch { }
 
-        var (modes, maps) = Parse(mpMapsPath);
-        try
-        {
-            var cache = new CacheFile { MpMapsTicks = ticks, MpMapsSize = size, Modes = modes, Maps = maps };
-            File.WriteAllText(cachePath, JsonSerializer.Serialize(cache, JWrite), new UTF8Encoding(false));
-        }
-        catch { }
+            var (modes, maps) = Parse(mpMapsPath);
+            try
+            {
+                var cache = new CacheFile { MpMapsTicks = ticks, MpMapsSize = size, Modes = modes, Maps = maps };
+                File.WriteAllText(cachePath, JsonSerializer.Serialize(cache, JWrite), new UTF8Encoding(false));
+            }
+            catch { }
 
-        return Build(modes, maps);
+            _loaded = Build(modes, maps);
+            _loadedTicks = ticks;
+            _loadedSize = size;
+            return _loaded;
+        }
     }
 
     private static MapCatalog Build(List<string> modes, List<MapEntry> maps)

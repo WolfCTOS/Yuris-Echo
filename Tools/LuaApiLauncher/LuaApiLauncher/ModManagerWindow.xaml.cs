@@ -49,6 +49,7 @@ public partial class ModManagerWindow : Window
     {
         if (rescan)
         {
+            LauncherCore.InvalidateModsCache();
             _mods = LauncherCore.ScanMods();
             _active = LauncherCore.ReadActiveIds(_mods);
         }
@@ -115,12 +116,13 @@ public partial class ModManagerWindow : Window
     {
         try
         {
-            LauncherCore.SaveActiveIds(_mods, _active);
-            _owner.ActiveMods.Clear();
-            foreach (var id in _active) _owner.ActiveMods.Add(id);
+            // The owner gets the same set, and the configuration is written with
+            // it, so the two sources of truth cannot drift apart.
+            _owner.ApplyActiveMods(_active);
+            LauncherCore.SaveActiveIds(_mods, _active, _owner.Config);
             _owner.UpdateModsUi();
         }
-        catch { }
+        catch (Exception ex) { LauncherLog.Error("The mod manager could not persist the active mod list", ex); }
     }
 
     private void RefreshStats()
