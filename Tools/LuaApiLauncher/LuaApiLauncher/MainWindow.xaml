@@ -447,7 +447,7 @@
             <Grid x:Name="LoadSaveView" Visibility="Collapsed" Margin="28,18,28,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
                 <StackPanel Orientation="Horizontal">
@@ -465,12 +465,12 @@
                         <ColumnDefinition Width="380" MinWidth="340"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- list of saves / replays; the panel ends with the list -->
+                    <!-- list of saves / replays; the panel fills the screen height -->
                     <Border Grid.Column="0" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
                         <Grid Margin="12">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
                             <StackPanel Orientation="Horizontal">
@@ -485,7 +485,6 @@
                                 <Grid>
                                     <ListBox x:Name="SaveList" Background="Transparent" BorderThickness="0" Foreground="#C9CCD3"
                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                             MaxHeight="440"
                                              SelectionChanged="SaveList_SelectionChanged"
                                              MouseDoubleClick="SaveList_MouseDoubleClick">
                                         <ListBox.ItemTemplate>
