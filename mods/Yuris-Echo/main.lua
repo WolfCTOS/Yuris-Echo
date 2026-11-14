@@ -118,7 +118,6 @@ local BFRT_HEAL_PER_TICK  = 10   -- HP/s per passenger (starting value)
 local bfrtState           = {}
 local bfrtSeen            = {}
 local bfrtFirstHealLogged = false
-local bfrtFirstBombLogged = false
 
 -- Chrono Commando (CCOMAND): long teleport recharge, and the warp leaves
 -- him unable to act for the same period (vulnerable after the jump).
@@ -405,7 +404,7 @@ local function tickBurns(frame)
     end
 end
 
--- BFRT: once per second, heal every passenger and defuse any attached bomb.
+-- BFRT: once per second, heal every passenger.
 -- The passenger itself is in limbo, so healing uses the native passenger path
 -- instead of SetHealthRatio (which refuses limboed objects).
 local function stepBattleFortress(u, frame)
@@ -463,17 +462,6 @@ local function stepBattleFortress(u, frame)
             local typeOk, typeName = pcall(function() return p:GetTypeName() end)
             if typeOk and type(typeName) == "string" and typeName ~= "" then
                 s.types[#s.types + 1] = typeName
-            end
-        end
-    end
-
-    for _, p in ipairs(passengers) do
-        local bombOk, hasBomb = pcall(function() return p:HasBomb() end)
-        if bombOk and hasBomb then
-            local disarmOk, disarmed = pcall(function() return p:DisarmBomb() end)
-            if disarmOk and disarmed and not bfrtFirstBombLogged then
-                bfrtFirstBombLogged = true
-                log("BFRT defused a bomb on a passenger (no explosion inside transport)")
             end
         end
     end
@@ -697,7 +685,6 @@ function YurisEcho.Update(frame)
         firstShellLogged = false
         firstBurnLogged = false
         bfrtFirstHealLogged = false
-        bfrtFirstBombLogged = false
         commandoLogged = false
         dlphFirstLogged = false
         log("new session")
