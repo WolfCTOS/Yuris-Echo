@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -41,6 +42,16 @@ public partial class App : Application
         if (e.Args.Any(a => string.Equals(a, "--diagnostics", StringComparison.OrdinalIgnoreCase)))
         {
             RunDiagnostics();
+            Shutdown(0);
+            return;
+        }
+
+        // "--dump-saves" writes the save names the launcher shows (the names the
+        // game stores in the .sav headers) and exits. It is the way to check
+        // the naming from a script.
+        if (e.Args.Any(a => string.Equals(a, "--dump-saves", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunDumpSaves();
             Shutdown(0);
             return;
         }
@@ -120,6 +131,42 @@ public partial class App : Application
             Console.WriteLine(path);
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Writes the save names the launcher shows, one "file :: name" per line.
+    /// </summary>
+    private static void RunDumpSaves()
+    {
+        try
+        {
+            var dir = Path.Combine(LauncherCore.Root, "Saved Games");
+            var lines = new List<string>();
+            if (Directory.Exists(dir))
+            {
+                foreach (var f in Directory.EnumerateFiles(dir, "*.sav").OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+                {
+                    var entry = new SaveEntry
+                    {
+                        FileName = Path.GetFileName(f),
+                        GameName = SaveEntry.ReadGameName(f),
+                        Modified = File.GetLastWriteTime(f),
+                    };
+                    lines.Add(entry.FileName + " :: " + entry.Name);
+                }
+            }
+
+            var path = Path.Combine(LauncherCore.Root, "saves-dump.txt");
+            File.WriteAllLines(path, lines);
+            LauncherLog.Info("Save names written to " + path);
+
+            AttachConsole(ATTACH_PARENT_PROCESS);
+            Console.WriteLine(path);
+        }
+        catch (Exception ex)
+        {
+            LauncherLog.Error("Save name dump failed", ex);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

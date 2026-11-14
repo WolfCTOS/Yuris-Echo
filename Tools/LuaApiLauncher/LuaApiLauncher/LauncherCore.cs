@@ -85,6 +85,9 @@ public sealed class MapEntry
     public bool InMpMaps { get; set; }
     public bool HasMpSection { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsFavorite { get; set; }
+
     public override string ToString() => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 }
 
@@ -298,7 +301,7 @@ public sealed class ClientSettings
         s.ResolutionX = Num(ini.Get("Video", "ClientResolutionX"), s.ResolutionX);
         s.ResolutionY = Num(ini.Get("Video", "ClientResolutionY"), s.ResolutionY);
         s.DetailLevel = Num(ini.Get("Options", "DetailLevel"), s.DetailLevel);
-        s.GameSpeed = Num(ini.Get("Options", "GameSpeed"), s.GameSpeed);
+        s.GameSpeed = LauncherCore.NormalizeEngineGameSpeed(Num(ini.Get("Options", "GameSpeed"), s.GameSpeed));
         s.Difficulty = Num(ini.Get("Options", "Difficulty"), s.Difficulty);
         s.Renderer = ini.Get("Compatibility", "Renderer") ?? s.Renderer;
         s.Language = L10n.Normalize(ini.Get("Options", "Translation") ?? s.Language);
@@ -399,10 +402,10 @@ public sealed class SkirmishOptions
 {
     public int Credits { get; set; } = 10000;      // cmbCredits default index 5
     /// <summary>
-    /// Game speed: 1 is the slowest, 6 the fastest. The game's own default is
-    /// 6, and the launcher uses the same value on both screens.
+    /// UI game speed: 1 = slowest, 7 = fastest (7 levels). Converted to the
+    /// engine/spawner value 0..6 (0 fastest, 6 slowest) when launching.
     /// </summary>
-    public int GameSpeed { get; set; } = 6;         // cmbGameSpeedCap default index 0
+    public int GameSpeed { get; set; } = 7;         // fastest by default
     public int UnitCount { get; set; } = 0;         // cmbStartingUnits default index 10
     public bool ShortGame { get; set; } = true;     // chkShortGame
     public bool BridgeDestroy { get; set; } = true; // chkDestrBridges
@@ -428,6 +431,8 @@ public sealed class SkirmishConfig
     public List<SkirmishPlayer> Players { get; set; } = new();
     /// <summary>Saved mod presets: name -> mod ids.</summary>
     public Dictionary<string, List<string>> Presets { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Maps marked as favorites (map Relative paths), shown at the top of the skirmish map list.</summary>
+    public List<string> FavoriteMaps { get; set; } = new();
 }
 
 public sealed class LauncherConfig
@@ -716,11 +721,66 @@ public static class LauncherCore
         {
             var path = Path.Combine(Root, "RA2MD.INI");
             var ini = IniFile.Load(path);
-            ini.Set("Options", "GameSpeed", Math.Clamp(options.GameSpeed, 1, 6).ToString());
+            var ui = NormalizeUiGameSpeed(options.GameSpeed);
+            var speed = UiToEngineGameSpeed(ui).ToString();
+            // [Options] is the canonical location; some modes/installations also
+            // keep a per-mode GameSpeed key. Update every section that already
+            // defines it so a stale value (e.g. Skirmish/LAN left at 1) cannot
+            // override the selected speed on launch.
+            ini.Set("Options", "GameSpeed", speed);
+            var sections = ini.Sections().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var section in sections)
+            {
+                if (section.Equals("Options", StringComparison.OrdinalIgnoreCase)) continue;
+                if (ini.Get(section, "GameSpeed") != null)
+                    ini.Set(section, "GameSpeed", speed);
+            }
             ini.Save(path);
-            LauncherLog.Step("skirmish", $"RA2MD.INI GameSpeed = {Math.Clamp(options.GameSpeed, 1, 6)}");
+            LauncherLog.Step("skirmish", $"RA2MD.INI GameSpeed = {speed} (ui {ui}, {GameSpeedLabel(ui)})");
         }
         catch (Exception ex) { LauncherLog.Error("Failed to apply the skirmish game speed", ex); }
+    }
+
+    public const int MinUiGameSpeed = 1;
+    public const int MaxUiGameSpeed = 7;
+    public const int MinEngineGameSpeed = 0;
+    public const int MaxEngineGameSpeed = 6;
+
+    /// <summary>UI speed 1..7 (1 slowest, 7 fastest) -> engine/spawner 0..6 (0 fastest, 6 slowest).</summary>
+    public static int UiToEngineGameSpeed(int uiSpeed) => 7 - NormalizeUiGameSpeed(uiSpeed);
+
+    /// <summary>Engine/spawner speed 0..6 (0 fastest, 6 slowest) -> UI speed 1..7 (1 slowest, 7 fastest).</summary>
+    public static int EngineToUiGameSpeed(int engineSpeed) => 7 - Math.Clamp(engineSpeed, MinEngineGameSpeed, MaxEngineGameSpeed);
+
+    public static int NormalizeUiGameSpeed(int uiSpeed) => Math.Clamp(uiSpeed, MinUiGameSpeed, MaxUiGameSpeed);
+
+    public static int NormalizeEngineGameSpeed(int engineSpeed) => Math.Clamp(engineSpeed, MinEngineGameSpeed, MaxEngineGameSpeed);
+
+    public static string GameSpeedLabel(int uiSpeed) => NormalizeUiGameSpeed(uiSpeed).ToString(CultureInfo.InvariantCulture);
+
+    public static IReadOnlyList<string> GameSpeedLabels()
+        => Enumerable.Range(MinUiGameSpeed, MaxUiGameSpeed - MinUiGameSpeed + 1).Select(GameSpeedLabel).ToList();
+
+    public static int ParseUiGameSpeedLabel(object? item, int fallbackUi)
+    {
+        if (item == null) return NormalizeUiGameSpeed(fallbackUi);
+        if (item is int i) return NormalizeUiGameSpeed(i);
+        var s = item.ToString() ?? "";
+        var digits = new string(s.TakeWhile(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var n) ? NormalizeUiGameSpeed(n) : NormalizeUiGameSpeed(fallbackUi);
+    }
+
+    /// <summary>
+    /// Migrates/skips legacy values: config historically stored UI 1..6 with opposite/inconsistent meaning.
+    /// Map old 1..6 (1 slowest-old, 6 fastest-old in old launcher intent) to new 1..7 keeping relative ends.
+    /// </summary>
+    public static int MigrateUiGameSpeed(int value)
+    {
+        // New valid UI range
+        if (value >= MinUiGameSpeed && value <= MaxUiGameSpeed) return value;
+        // Old common 1..6 range -> stretch to 1..7 preserving endpoints
+        if (value >= 1 && value <= 6) return value == 6 ? 7 : value;
+        return MaxUiGameSpeed;
     }
 
     /// <summary>
@@ -809,6 +869,10 @@ public static class LauncherCore
         cfg.Options ??= new SkirmishOptions();
         cfg.Players ??= new List<SkirmishPlayer>();
         cfg.Presets ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        cfg.FavoriteMaps ??= new List<string>();
+
+        // Migrate legacy stored UI speed (1..6) to current 1..7 UI scale.
+        cfg.Options.GameSpeed = MigrateUiGameSpeed(cfg.Options.GameSpeed);
 
         if (cfg.Players.Count > MaxSkirmishSlots)
             cfg.Players.RemoveRange(MaxSkirmishSlots, cfg.Players.Count - MaxSkirmishSlots);
@@ -1062,20 +1126,6 @@ public static class LauncherCore
 
     public static bool Exists(string relative) => File.Exists(Path.Combine(Root, relative));
 
-    /// <summary>
-    /// Required engine extensions provided outside this repository (CnCNet YR client / separate install).
-    /// Missing files make a Syringe-based launch fail in a non-obvious way.
-    /// </summary>
-    public static (bool ok, string? message) CheckRequiredEngineExtensions()
-    {
-        var missing = new[] { "Ares.dll", "Phobos.dll", "ares.mix" }
-            .Where(f => !Exists(f))
-            .ToList();
-        if (missing.Count == 0) return (true, null);
-        var files = string.Join(", ", missing);
-        return (false, L10n.F("Отсутствуют обязательные компоненты: {0}. Установите Ares/Phobos (Ares — через CnCNet YR client, Phobos — отдельно, если клиент его не включает) и повторите запуск.", files));
-    }
-
     public static void Launch(string exe, List<string>? args = null)
     {
         var path = Path.IsPathRooted(exe) ? exe : Path.Combine(Root, exe);
@@ -1099,9 +1149,6 @@ public static class LauncherCore
         var (sOk, _) = CheckExe(cfg.Syringe);
         if (sOk)
         {
-            var (extOk, extMsg) = CheckRequiredEngineExtensions();
-            if (!extOk) throw new UserFacingException(extMsg!);
-
             // The game executable is the last Syringe argument; the game
             // arguments travel in one "--args=..." group after it, the way the
             // CnCNet client passes them. Syringe only forwards the whole group
@@ -1141,12 +1188,160 @@ public static class LauncherCore
             return DateTime.UtcNow;
         }
 
-        var (extOk, extMsg) = CheckRequiredEngineExtensions();
-        if (!extOk) throw new UserFacingException(extMsg!);
-
         var args = BuildSpawnSyringeArgs(gameExe, def);
         Launch(launcherExe, args);
         return DateTime.UtcNow;
+    }
+
+    public sealed class GameSpeedConstraint
+    {
+        public bool Disable { get; init; }
+        /// <summary>Engine cap value 0..6 (0 fastest). When set, effective engine speed must be >= cap (i.e. not faster than cap).</summary>
+        public int? MaxEngineSpeed { get; init; }
+        public string Source { get; init; } = "";
+
+        public int ApplyUi(int uiSpeed)
+        {
+            uiSpeed = NormalizeUiGameSpeed(uiSpeed);
+            if (Disable) return uiSpeed; // kept for UI state; actual lock handled separately
+            if (MaxEngineSpeed is int cap)
+            {
+                var engine = UiToEngineGameSpeed(uiSpeed);
+                if (engine < cap) engine = cap; // lower engine = faster, cap limits fastest allowed
+                return EngineToUiGameSpeed(engine);
+            }
+            return uiSpeed;
+        }
+
+        public string? DescribeLock(int requestedUi)
+        {
+            requestedUi = NormalizeUiGameSpeed(requestedUi);
+            if (Disable) return L10n.F("Скорость игры зафиксирована режимом/картой ({0}).", Source);
+            if (MaxEngineSpeed is int cap)
+            {
+                var limitedUi = EngineToUiGameSpeed(cap);
+                if (UiToEngineGameSpeed(requestedUi) < cap)
+                    return L10n.F("Режим/карта ограничивает максимальную скорость до «{0}» ({1}).", GameSpeedLabel(limitedUi), Source);
+            }
+            return null;
+        }
+    }
+
+    /// <summary>Reads speed lock/cap from mode/map/global forced spawn options.</summary>
+    public static GameSpeedConstraint GetSkirmishSpeedConstraint(string? selectedMode)
+    {
+        try
+        {
+            var mode = selectedMode ?? "";
+            var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            void Merge(string? sectionName, IniFile src)
+            {
+                if (string.IsNullOrWhiteSpace(sectionName)) return;
+                foreach (var (k, v) in src.Section(sectionName)) merged[k] = v;
+            }
+
+            // Global forced options
+            try
+            {
+                var go = IniFile.Load(Path.Combine(Root, "Resources", "GameOptions.ini"));
+                Merge("ForcedSpawnIniOptions", go);
+            }
+            catch { }
+
+            // Mode-specific forced options
+            try
+            {
+                var ini = IniFile.Load(Path.Combine(Root, "INI", "MPMaps.ini"));
+                var forcedSection = ini.Get(mode, "ForcedSpawnIniOptions");
+                Merge(forcedSection, ini);
+                // Some configs may put options directly on mode section
+                Merge(mode, ini);
+            }
+            catch { }
+
+            bool disable = merged.TryGetValue("chkDisableGameSpeed", out var dv) && IsTrue(dv)
+                        || merged.TryGetValue("DisableGameSpeed", out var dv2) && IsTrue(dv2);
+            int? cap = null;
+            foreach (var key in new[] { "cmbGameSpeedCapSkirmish", "cmbGameSpeedCap", "cmbGameSpeedCapMultiplayer", "GameSpeedCap" })
+            {
+                if (merged.TryGetValue(key, out var v) && int.TryParse(v, out var n)) { cap = NormalizeEngineGameSpeed(n); break; }
+            }
+            // If forced options hard-set GameSpeed, treat as lock to that value.
+            if (!disable && merged.TryGetValue("GameSpeed", out var gs) && int.TryParse(gs, out var forcedEngine))
+            {
+                cap = NormalizeEngineGameSpeed(forcedEngine);
+                disable = true;
+            }
+
+            return new GameSpeedConstraint { Disable = disable, MaxEngineSpeed = cap, Source = string.IsNullOrWhiteSpace(mode) ? "forced" : mode };
+        }
+        catch { return new GameSpeedConstraint(); }
+    }
+
+    public static string BuildSpeedDiagnosticsDump(LauncherConfig cfg, int? effectiveUiOverride = null)
+    {
+        var sb = new StringBuilder();
+        var requestedUi = NormalizeUiGameSpeed(cfg.Skirmish.Options.GameSpeed);
+        var effectiveUi = NormalizeUiGameSpeed(effectiveUiOverride ?? requestedUi);
+        var requestedEngine = UiToEngineGameSpeed(requestedUi);
+        var effectiveEngine = UiToEngineGameSpeed(effectiveUi);
+        sb.AppendLine($"UI requested={requestedUi} ({GameSpeedLabel(requestedUi)}), engine={requestedEngine}");
+        if (effectiveUi != requestedUi)
+            sb.AppendLine($"UI effective={effectiveUi} ({GameSpeedLabel(effectiveUi)}), engine={effectiveEngine}");
+        try
+        {
+            var ra2 = IniFile.Load(Ra2MdIniPath);
+            foreach (var sec in new[] { "Options", "Skirmish", "LAN", "WonlinePref" })
+                sb.AppendLine($"RA2MD.INI [{sec}] GameSpeed={ra2.Get(sec, "GameSpeed") ?? "(missing)"}");
+        }
+        catch (Exception ex) { sb.AppendLine($"RA2MD.INI read error: {ex.Message}"); }
+        try
+        {
+            var spawnPath = Path.Combine(Root, "spawn.ini");
+            if (File.Exists(spawnPath))
+            {
+                var spawn = IniFile.Load(spawnPath);
+                sb.AppendLine($"spawn.ini [Settings] GameSpeed={spawn.Get("Settings", "GameSpeed") ?? "(missing)"}");
+                sb.AppendLine($"spawn.ini [Settings] LoadSaveGame={spawn.Get("Settings", "LoadSaveGame") ?? "(missing)"}");
+                sb.AppendLine($"spawn.ini [Settings] SaveGameName={spawn.Get("Settings", "SaveGameName") ?? "(missing)"}");
+            }
+            else sb.AppendLine("spawn.ini: (not present)");
+        }
+        catch (Exception ex) { sb.AppendLine($"spawn.ini read error: {ex.Message}"); }
+        var constraint = GetSkirmishSpeedConstraint(cfg.Skirmish.SelectedMode);
+        if (constraint.Disable || constraint.MaxEngineSpeed != null)
+            sb.AppendLine($"constraint: disable={constraint.Disable}, capEngine={constraint.MaxEngineSpeed?.ToString() ?? "-"} ({constraint.Source})");
+        return sb.ToString().TrimEnd();
+    }
+
+    public static string? VerifyLaunchedSpeedValues(LauncherConfig cfg, int effectiveUi, bool expectSpawn = true)
+    {
+        try
+        {
+            var expectedEngine = UiToEngineGameSpeed(effectiveUi).ToString();
+            var ra2 = IniFile.Load(Ra2MdIniPath);
+            var problems = new List<string>();
+            foreach (var sec in new[] { "Options", "Skirmish", "LAN", "WonlinePref" })
+            {
+                var v = ra2.Get(sec, "GameSpeed");
+                if (v != null && v != expectedEngine)
+                    problems.Add($"RA2MD.INI [{sec}]={v}, expected {expectedEngine}");
+            }
+            if (expectSpawn)
+            {
+                var spawnPath = Path.Combine(Root, "spawn.ini");
+                if (File.Exists(spawnPath))
+                {
+                    var spawn = IniFile.Load(spawnPath);
+                    var v = spawn.Get("Settings", "GameSpeed");
+                    if (v != null && v != expectedEngine)
+                        problems.Add($"spawn.ini [Settings]={v}, expected {expectedEngine}");
+                }
+            }
+            return problems.Count == 0 ? null : string.Join("; ", problems);
+        }
+        catch (Exception ex) { return "verify error: " + ex.Message; }
     }
 
     /// <summary>

@@ -39,7 +39,9 @@ public static class SkirmishSpawn
         var factions = LauncherCore.SkirmishFactions();
         var colorCount = Math.Max(1, LauncherCore.SkirmishColors().Count);
         var rng = new Random();
-        var (gameMode, uiGameMode) = ResolveGameMode(cfg.SelectedMode);
+        var (gameMode, uiGameMode, modeForced) = ResolveGameMode(cfg.SelectedMode);
+        var speedConstraint = LauncherCore.GetSkirmishSpeedConstraint(cfg.SelectedMode);
+        var effectiveUiSpeed = speedConstraint.ApplyUi(cfg.Options.GameSpeed);
 
         // The spawner identifies a house by its country index and two houses may
         // not share one, so a faction that is already taken goes to a free one.
@@ -51,7 +53,7 @@ public static class SkirmishSpawn
         var aiColors = ais.Select(a => Math.Clamp(a.Color, 0, colorCount - 1)).ToList();
 
         WriteSpawnMap(map, cfg.Options);
-        WriteSpawnIni(cfg, map, human, ais, humanCountry, humanColor, aiCountries, aiColors, gameMode, uiGameMode);
+        WriteSpawnIni(cfg, map, human, ais, humanCountry, humanColor, aiCountries, aiColors, gameMode, uiGameMode, modeForced, effectiveUiSpeed, speedConstraint.Disable);
     }
 
     /// <summary>
@@ -74,23 +76,26 @@ public static class SkirmishSpawn
         return primary;
     }
 
-    private static (int GameMode, string UiName) ResolveGameMode(string? selectedMode)
+    private static (int GameMode, string UiName, Dictionary<string, string> ModeForced) ResolveGameMode(string? selectedMode)
     {
         var mode = selectedMode ?? "";
         var ini = IniFile.Load(Path.Combine(LauncherCore.Root, "INI", "MPMaps.ini"));
         var forcedSection = ini.Get(mode, "ForcedSpawnIniOptions");
+        var forced = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(forcedSection))
         {
+            foreach (var (k, v) in ini.Section(forcedSection))
+                forced[k] = v;
             var value = ini.Get(forcedSection, "GameMode");
-            if (int.TryParse(value, out var gameMode)) return (gameMode, mode);
+            if (int.TryParse(value, out var gameMode)) return (gameMode, mode, forced);
         }
-        return (1, "Battle");
+        return (1, "Battle", forced);
     }
 
     private static void WriteSpawnIni(
         SkirmishConfig cfg, MapEntry map, SkirmishPlayer human, List<SkirmishPlayer> ais,
         int humanCountry, int humanColor, List<int> aiCountries, List<int> aiColors,
-        int gameMode, string uiGameMode)
+        int gameMode, string uiGameMode, Dictionary<string, string> modeForced, int effectiveUiSpeed, bool disableSpeed)
     {
         var o = cfg.Options;
         var sb = new StringBuilder();
@@ -112,7 +117,8 @@ public static class SkirmishSpawn
         sb.AppendLine("Bases=Yes");
         sb.AppendLine("Credits=" + Math.Max(0, o.Credits));
         sb.AppendLine("UnitCount=" + Math.Max(0, o.UnitCount));
-        sb.AppendLine("GameSpeed=" + Math.Clamp(o.GameSpeed, 1, 6));
+        sb.AppendLine("GameSpeed=" + LauncherCore.UiToEngineGameSpeed(effectiveUiSpeed));
+        if (disableSpeed) sb.AppendLine("DisableGameSpeed=Yes");
         sb.AppendLine("ShortGame=" + YesNo(o.ShortGame));
         sb.AppendLine("BridgeDestroy=" + YesNo(o.BridgeDestroy));
         sb.AppendLine("BuildOffAlly=" + YesNo(o.BuildOffAlly));
@@ -128,6 +134,17 @@ public static class SkirmishSpawn
             if (string.IsNullOrWhiteSpace(key)) continue;
             sb.AppendLine(key + "=" + value);
         }
+
+        // Mode-specific forced options from MPMaps.ini (caps/locks etc.).
+        foreach (var kv in modeForced)
+        {
+            if (string.IsNullOrWhiteSpace(kv.Key)) continue;
+            if (kv.Key.Equals("GameMode", StringComparison.OrdinalIgnoreCase)) continue;
+            sb.AppendLine(kv.Key + "=" + kv.Value);
+        }
+        // Re-assert computed speed/lock after forced merges so UI selection/cap is honored.
+        sb.AppendLine("GameSpeed=" + LauncherCore.UiToEngineGameSpeed(effectiveUiSpeed));
+        if (disableSpeed) sb.AppendLine("DisableGameSpeed=Yes");
 
         sb.AppendLine();
         sb.AppendLine("[HouseHandicaps]");

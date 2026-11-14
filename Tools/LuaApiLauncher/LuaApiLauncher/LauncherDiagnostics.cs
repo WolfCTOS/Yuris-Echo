@@ -55,7 +55,9 @@ internal static class LauncherDiagnostics
         sb.AppendLine($"  language   : {cfg.Language}");
         sb.AppendLine($"  map        : {Relative(cfg.Skirmish.SelectedMap)}");
         sb.AppendLine($"  mode       : {cfg.Skirmish.SelectedMode}");
-        sb.AppendLine($"  game speed : {cfg.Skirmish.Options.GameSpeed}");
+        sb.AppendLine($"  game speed : ui={cfg.Skirmish.Options.GameSpeed} engine={LauncherCore.UiToEngineGameSpeed(cfg.Skirmish.Options.GameSpeed)} ({LauncherCore.GameSpeedLabel(cfg.Skirmish.Options.GameSpeed)})");
+        foreach (var line in LauncherCore.BuildSpeedDiagnosticsDump(cfg).Split('\n'))
+            sb.AppendLine("               " + line.TrimEnd('\r'));
         sb.AppendLine($"  players    : {cfg.Skirmish.Players.Count}");
         foreach (var p in cfg.Skirmish.Players)
             sb.AppendLine($"    - {(p.IsHuman ? "human" : "ai")} '{p.Name}' country={p.Country} color={p.Color} team={p.Team} start={p.Start} ai={p.AiLevel}");

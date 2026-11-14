@@ -418,6 +418,7 @@
                             <local:MenuActionButton x:Name="BtnSkirmish" Text="Скирмиш" Margin="0,0,0,4" Click="BtnSkirmish_Click"/>
                             <local:MenuActionButton x:Name="BtnCncNet" Text="CnCNet" Margin="0,0,0,4" Click="BtnCncNet_Click"/>
                             <local:MenuActionButton x:Name="BtnCampaign" Text="Кампания" Margin="0,0,0,4" Click="BtnCampaign_Click"/>
+                            <local:MenuActionButton x:Name="BtnLoadSave" Text="Загрузить сохранение" Margin="0,0,0,4" Click="BtnLoadSave_Click"/>
                             <local:MenuActionButton x:Name="BtnOptions" Text="Опции" Margin="0,0,0,4" Click="BtnOptions_Click"/>
                             <local:MenuActionButton x:Name="BtnStats" Text="Статистика" Margin="0,0,0,4" Click="BtnStats_Click"/>
                             <local:MenuActionButton x:Name="BtnMapEditor" Text="Редактор карт" Margin="0,0,0,4" Click="BtnMapEditor_Click"/>
@@ -440,6 +441,107 @@
                 <TextBlock x:Name="MainBuildMarker" Text="" FontSize="9" Foreground="#8B919D"
                            HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14,0,0,10"
                            IsHitTestVisible="False"/>
+            </Grid>
+
+            <!-- ======================= LOAD / SAVE ======================= -->
+            <Grid x:Name="LoadSaveView" Visibility="Collapsed" Margin="28,18,28,18">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal">
+                    <Rectangle Width="3" Height="46" Fill="#E6E8EC" Margin="0,0,10,0"/>
+                    <StackPanel>
+                        <TextBlock Text="СОХРАНЕНИЯ" FontSize="11" Foreground="#E6E8EC"/>
+                        <TextBlock Text="ЗАГРУЗИТЬ СОХРАНЕНИЕ" FontSize="26" Foreground="#C9CCD3"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <Grid Grid.Row="1" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="420"/>
+                        <ColumnDefinition Width="14"/>
+                        <ColumnDefinition Width="380" MinWidth="340"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- list of saves / replays -->
+                    <Border Grid.Column="0" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
+                        <Grid Margin="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton x:Name="TabSavedGames" Content="СОХРАНЕНИЯ" GroupName="SaveTab"
+                                             Style="{StaticResource SideTab}" IsChecked="True"/>
+                                <RadioButton x:Name="TabReplays" Content="РЕПЛЕИ" GroupName="SaveTab"
+                                             Style="{StaticResource SideTab}"/>
+                            </StackPanel>
+
+                            <Border Grid.Row="1" Background="#0F131B" BorderBrush="#2A303C" BorderThickness="1" Margin="0,8,0,0">
+                                <Grid>
+                                    <ListBox x:Name="SaveList" Background="Transparent" BorderThickness="0" Foreground="#C9CCD3"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             SelectionChanged="SaveList_SelectionChanged"
+                                             MouseDoubleClick="SaveList_MouseDoubleClick">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="4,2">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Name}" Foreground="#C9CCD3" FontSize="12"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding DateText}" Foreground="#8B919D"
+                                                               FontSize="11" Margin="10,0,2,0"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock x:Name="SaveListEmpty" Text="Сохранения не найдены." Foreground="#8B919D"
+                                               FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- details + actions -->
+                    <Border Grid.Column="2" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
+                        <Grid Margin="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="СОХРАНЕНИЕ" FontSize="11" Foreground="#9AA0AC" Margin="4,0,0,8"/>
+
+                            <StackPanel Grid.Row="1">
+                                <TextBlock x:Name="SaveDetailsName" FontSize="14" FontWeight="SemiBold" Foreground="#C9CCD3"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="SaveDetailsMeta" FontSize="10" Foreground="#9AA0AC" Margin="0,4,0,0"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="SaveDetailsHint" FontSize="10" Foreground="#E6B85C" Margin="0,6,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="2">
+                                <Button x:Name="BtnLoadSaveStart" Content="ЗАГРУЗИТЬ" Height="40"
+                                        Style="{StaticResource SmallButton}" Foreground="#E6E8EC"
+                                        Click="BtnLoadSaveStart_Click"/>
+                                <Button x:Name="BtnLoadSaveDelete" Content="УДАЛИТЬ" Height="40" Margin="0,8,0,0"
+                                        Style="{StaticResource SmallButton}" Foreground="#E6E8EC"
+                                        Click="BtnLoadSaveDelete_Click"/>
+                                <Button x:Name="BtnLoadSaveBack" Content="НАЗАД" Height="40" Margin="0,8,0,0"
+                                        Style="{StaticResource SmallButton}" Click="BtnLoadSaveBack_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
             </Grid>
 
             <!-- ======================= CAMPAIGN ======================= -->
@@ -601,6 +703,9 @@
                                        Foreground="#E06B6B" Margin="2,6,2,0" TextWrapping="Wrap"
                                        Visibility="Collapsed"/>
 
+                            <TextBlock DockPanel.Dock="Bottom" x:Name="SkirmishSpeedInfo" FontSize="10" Foreground="#C9CCD3"
+                                       VerticalAlignment="Center" Margin="2,6,2,0" TextWrapping="Wrap"/>
+
                             <TextBlock DockPanel.Dock="Bottom" x:Name="SkirmishStatus" FontSize="10" Foreground="#9AA0AC"
                                        VerticalAlignment="Center" Margin="2,8,2,8" TextWrapping="Wrap"/>
 
@@ -615,8 +720,34 @@
                             </StackPanel>
 
                             <ListBox x:Name="MapList" Background="Transparent" BorderThickness="0" Foreground="#C9CCD3"
-                                     DisplayMemberPath="DisplayName" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                     SelectionChanged="MapList_SelectionChanged"/>
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     SelectionChanged="MapList_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Width="22" Height="22" Margin="0,0,4,0" Padding="0"
+                                                    Background="Transparent" BorderThickness="0" Focusable="False"
+                                                    Cursor="Hand" Click="MapFavorite_Click"
+                                                    ToolTip="В избранное" ToolTipService.ShowOnDisabled="True">
+                                                <TextBlock x:Name="FavStar" Text="☆" FontSize="14" Foreground="#8B919D"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Button>
+                                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Foreground="#C9CCD3"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                <Setter TargetName="FavStar" Property="Text" Value="★"/>
+                                                <Setter TargetName="FavStar" Property="Foreground" Value="#E6B85C"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </DockPanel>
                     </Border>
 

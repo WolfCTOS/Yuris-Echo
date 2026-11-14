@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -77,6 +77,10 @@ public partial class MainWindow : Window
         MapPreviewOverlay.SizeChanged += (_, _) => UpdateStartMarkers();
         // Map rows are list items, not buttons, so they need their own click sound.
         MapList.AddHandler(ListBoxItem.MouseLeftButtonUpEvent, new MouseButtonEventHandler(ListItem_Click));
+        // Tab handlers are attached here: a Checked handler in XAML would run
+        // while the tree is still loading and touch not-yet-created controls.
+        TabSavedGames.Checked += SaveTab_Checked;
+        TabReplays.Checked += SaveTab_Checked;
         // The background picture drifts with the pointer.
         RootLayout.MouseMove += (_, e) => OnBackgroundMouseMove(e);
         RootLayout.MouseLeave += (_, _) => OnBackgroundMouseLeave();
@@ -397,7 +401,7 @@ public partial class MainWindow : Window
         if (e.Key != Key.Escape) return;
         if (NoticeOverlay.Visibility == Visibility.Visible) { NoticeOverlay.Visibility = Visibility.Collapsed; return; }
         if (OptionsView.Visibility == Visibility.Visible) { TryLeaveOptions(); return; }
-        if (SkirmishView.Visibility == Visibility.Visible || StatsView.Visibility == Visibility.Visible || CompanyView.Visibility == Visibility.Visible)
+        if (SkirmishView.Visibility == Visibility.Visible || StatsView.Visibility == Visibility.Visible || CompanyView.Visibility == Visibility.Visible || LoadSaveView.Visibility == Visibility.Visible)
             ShowMain();
     }
 
@@ -423,6 +427,7 @@ public partial class MainWindow : Window
         OptionsView.Visibility = Visibility.Collapsed;
         StatsView.Visibility = Visibility.Collapsed;
         CompanyView.Visibility = Visibility.Collapsed;
+        LoadSaveView.Visibility = Visibility.Collapsed;
         view.Visibility = Visibility.Visible;
 
         // Keep the main menu background image clear; dim it on other screens for readability.
@@ -546,8 +551,10 @@ public partial class MainWindow : Window
         CmbClientRes.Text = settings.ResolutionX + "x" + settings.ResolutionY;
         CmbDetail.SelectedIndex = Math.Clamp(settings.DetailLevel, 0, 2);
         CmbDifficulty.SelectedIndex = Math.Clamp(settings.Difficulty, 0, 2);
-        CmbGameSpeed.SelectedItem = settings.GameSpeed;
-        if (CmbGameSpeed.SelectedItem == null) CmbGameSpeed.SelectedIndex = 0;
+        var uiSpeed = LauncherCore.EngineToUiGameSpeed(settings.GameSpeed);
+        CmbGameSpeed.SelectedItem = CmbGameSpeed.Items.OfType<string>().FirstOrDefault(s => LauncherCore.ParseUiGameSpeedLabel(s, uiSpeed) == uiSpeed)
+                                   ?? CmbGameSpeed.Items.OfType<string>().LastOrDefault();
+        if (CmbGameSpeed.SelectedItem == null && CmbGameSpeed.Items.Count > 0) CmbGameSpeed.SelectedIndex = CmbGameSpeed.Items.Count - 1;
         SelectKey(CmbRenderer, settings.Renderer);
         SelectKey(CmbLanguage, L10n.Normalize(_cfg.Language));
         ChkBorderless.IsChecked = settings.BorderlessClient;
@@ -709,7 +716,7 @@ public partial class MainWindow : Window
             // Defaults aligned with typical client defaults; only UI fields.
             CmbDetail.SelectedIndex = 2;
             CmbDifficulty.SelectedIndex = 1;
-            CmbGameSpeed.SelectedIndex = 5; // 6
+            if (CmbGameSpeed.Items.Count > 0) CmbGameSpeed.SelectedIndex = CmbGameSpeed.Items.Count - 1; // fastest (UI 7)
             if (CmbRenderer.Items.Count > 0) CmbRenderer.SelectedIndex = 0;
             var langIdx = 0;
             for (int i=0;i<CmbLanguage.Items.Count;i++) if (CmbLanguage.Items[i] is System.Collections.Generic.KeyValuePair<string,string> kv && L10n.Normalize(kv.Key)==L10n.English) { langIdx=i; break; }
@@ -843,7 +850,7 @@ public partial class MainWindow : Window
 
         CmbDetail.ItemsSource = new[] { L10n.T("Низкая"), L10n.T("Средняя"), L10n.T("Высокая") };
         CmbDifficulty.ItemsSource = new[] { L10n.T("Легко"), L10n.T("Нормально"), L10n.T("Сложно") };
-        CmbGameSpeed.ItemsSource = new[] { 1, 2, 3, 4, 5, 6 };
+        CmbGameSpeed.ItemsSource = LauncherCore.GameSpeedLabels().ToList();
         CmbRenderer.ItemsSource = LauncherCore.ScanRenderers();
         CmbLanguage.ItemsSource = LauncherCore.ScanLanguages();
     }
@@ -1009,6 +1016,154 @@ public partial class MainWindow : Window
     }
 
     private void BtnCampaign_Click(object sender, EventArgs e) => ShowCompanySelect();
+
+    private void BtnLoadSave_Click(object sender, EventArgs e) => ShowLoadSave();
+
+    /// <summary>Saved games screen, laid out like the skirmish screen (list + details + actions).</summary>
+    private void ShowLoadSave()
+    {
+        ShowOnly(LoadSaveView);
+        RefreshSaveList();
+        UpdateLayout();
+        L10n.Apply(this);
+    }
+
+    private void SaveTab_Checked(object sender, RoutedEventArgs e) => RefreshSaveList();
+
+    private bool ReplayTabSelected => TabReplays != null && TabReplays.IsChecked == true;
+
+    private void RefreshSaveList()
+    {
+        var dir = ReplayTabSelected
+            ? Path.Combine(LauncherCore.Root, "Replays")
+            : Path.Combine(LauncherCore.Root, "Saved Games");
+        var pattern = ReplayTabSelected ? "*.yrrp" : "*.sav";
+
+        var entries = new List<SaveEntry>();
+        try
+        {
+            if (Directory.Exists(dir))
+            {
+                entries = Directory.EnumerateFiles(dir, pattern)
+                    .Select(f => new SaveEntry
+                    {
+                        FileName = Path.GetFileName(f),
+                        GameName = SaveEntry.ReadGameName(f),
+                        Modified = File.GetLastWriteTime(f),
+                        SizeText = (new FileInfo(f).Length / 1024.0 / 1024.0).ToString("0.0") + " MB",
+                    })
+                    .OrderByDescending(e => e.Modified)
+                    .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            LauncherLog.Error("Failed to list saved games", ex);
+        }
+
+        SaveList.ItemsSource = entries;
+        // Select the first row so the details panel and the load button match the list.
+        SaveList.SelectedIndex = entries.Count > 0 ? 0 : -1;
+        SaveListEmpty.Text = ReplayTabSelected ? L10n.T("Реплеи не найдены.") : L10n.T("Сохранения не найдены.");
+        SaveListEmpty.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSaveDetails(SaveList.SelectedItem as SaveEntry);
+    }
+
+    private void UpdateSaveDetails(SaveEntry? entry)
+    {
+        SaveDetailsName.Text = entry?.Name ?? "";
+        SaveDetailsMeta.Text = entry == null ? "" : entry.DateText + " | " + entry.SizeText + " | " + entry.FileName;
+        // shortcut: replay playback needs its own launch path, the launcher only lists them.
+        SaveDetailsHint.Text = entry != null && ReplayTabSelected ? L10n.T("Запуск реплеев не поддерживается") : "";
+        BtnLoadSaveStart.IsEnabled = entry != null && !ReplayTabSelected;
+        BtnLoadSaveDelete.IsEnabled = entry != null;
+    }
+
+    private void SaveList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        UpdateSaveDetails(SaveList.SelectedItem as SaveEntry);
+    }
+
+    private void SaveList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (!ReplayTabSelected && SaveList.SelectedItem is SaveEntry) BtnLoadSaveStart_Click(sender, e);
+    }
+
+    private void BtnLoadSaveBack_Click(object sender, RoutedEventArgs e) => ShowMain();
+
+    private void BtnLoadSaveDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (SaveList.SelectedItem is not SaveEntry entry) return;
+
+        var dir = ReplayTabSelected
+            ? Path.Combine(LauncherCore.Root, "Replays")
+            : Path.Combine(LauncherCore.Root, "Saved Games");
+        var question = ReplayTabSelected ? L10n.T("Удалить реплей?") : L10n.T("Удалить сохранение?");
+        if (System.Windows.MessageBox.Show(this, question + "\n" + entry.FileName,
+                L10n.T("Загрузка сохранения"), System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning)
+            != System.Windows.MessageBoxResult.Yes) return;
+
+        try
+        {
+            File.Delete(Path.Combine(dir, entry.FileName));
+        }
+        catch (Exception ex)
+        {
+            ShowError(L10n.T("Не удалось удалить файл."), ex);
+            return;
+        }
+
+        RefreshSaveList();
+    }
+
+    private void BtnLoadSaveStart_Click(object sender, RoutedEventArgs e)
+    {
+        if (SaveList.SelectedItem is not SaveEntry entry) return;
+        var selected = entry.FileName;
+        try
+        {
+            if (LauncherCore.IsGameProcessRunning(_cfg))
+            {
+                ShowNotice(L10n.T("Запуск"), L10n.T("Игра уже запущена. Закройте текущий процесс игры перед новым запуском."));
+                return;
+            }
+            if (!LauncherCore.Exists("CnCNet-Spawner.dll") || (!LauncherCore.Exists("gamemd-spawn.exe") && !LauncherCore.Exists(_cfg.Gamemd)))
+            {
+                ShowNotice(L10n.T("ОШИБКА ЗАПУСКА"), L10n.T("Для загрузки сохранения через Syringe не найден gamemd-spawn.exe или CnCNet-Spawner.dll."));
+                return;
+            }
+
+            LauncherLog.Section("load save");
+            LauncherLog.Step("loadsave", $"save = {selected}");
+            LauncherCore.SaveActiveIds(_mods, _active, _cfg);
+            CampaignData.WriteLoadSaveSpawnIni(selected);
+            LauncherLog.Step("loadsave", "speed dump:\n" + LauncherCore.BuildSpeedDiagnosticsDump(_cfg));
+
+            var started = LauncherCore.LaunchSpawnedGame(_cfg);
+            var gameProcess = Path.GetFileNameWithoutExtension(
+                LauncherCore.Exists("gamemd-spawn.exe") ? "gamemd-spawn.exe" : LauncherCore.GameProcessName(_cfg));
+            _ = WatchMissionLaunchAsync(started, gameProcess, Path.GetFileNameWithoutExtension(selected));
+
+            if (LauncherCore.WantsLuaApi(_cfg))
+            {
+                var dll = Path.Combine(LauncherCore.Root, "LuaAPI.dll");
+                _ = LuaApiInjector.InjectWhenGameStartsAsync(started, dll, gameProcess)
+                    .ContinueWith(t =>
+                    {
+                        var error = t.IsCompletedSuccessfully ? t.Result : t.Exception?.GetBaseException().Message;
+                        if (string.IsNullOrEmpty(error)) return;
+                        Dispatcher.Invoke(() => ShowToast(L10n.T("LuaAPI: ") + error, 4));
+                    }, TaskScheduler.Default);
+            }
+
+            ShowToast(L10n.F("Загрузка сохранения: {0}", selected));
+        }
+        catch (Exception ex)
+        {
+            ShowError(L10n.T("Не удалось загрузить сохранение."), ex);
+        }
+    }
 
     private void ShowCompanySelect()
     {
@@ -1219,19 +1374,36 @@ public partial class MainWindow : Window
 
             var settings = LauncherCore.LoadClientSettingsSafe(ClientIni);
             var difficulty = Math.Clamp(settings.Difficulty, 0, 2);
-            var gameSpeed = Math.Clamp(settings.GameSpeed, 0, 6);
+            var requestedUi = LauncherCore.EngineToUiGameSpeed(settings.GameSpeed);
+            var speedConstraint = LauncherCore.GetSkirmishSpeedConstraint(_cfg.Skirmish.SelectedMode);
+            var effectiveUi = speedConstraint.ApplyUi(requestedUi);
+            if (speedConstraint.Disable || effectiveUi != requestedUi)
+            {
+                var msg = speedConstraint.DescribeLock(requestedUi) ?? L10n.F("Скорость скорректирована ограничением режима/карты: «{0}».", LauncherCore.GameSpeedLabel(effectiveUi));
+                LauncherLog.Warn("campaign speed constraint: " + msg + $" (requested ui={requestedUi}, effective ui={effectiveUi})");
+                ShowToast(msg);
+            }
 
-            // Keep campaign difficulty in game settings (used by normal campaign flow too).
+            // Keep campaign difficulty/speed in game settings (used by normal campaign flow too).
             var iniPath = Path.Combine(LauncherCore.Root, "RA2MD.INI");
             var ini = IniFile.Load(iniPath);
             ini.Set("Options", "CampDifficulty", difficulty.ToString());
             ini.Set("Options", "Difficulty", difficulty.ToString());
-            ini.Set("Options", "GameSpeed", gameSpeed.ToString());
+            ini.Set("Options", "GameSpeed", LauncherCore.UiToEngineGameSpeed(effectiveUi).ToString());
             ini.Save(iniPath);
 
-            CampaignData.WriteSpawnIni(mission, difficulty, gameSpeed, _cfg.Skirmish.Options);
+            LauncherLog.Section("campaign launch");
+            LauncherLog.Step("campaign", $"mission = {mission.Id} ({mission.DisplayName})");
+            CampaignData.WriteSpawnIni(mission, difficulty, effectiveUi, _cfg.Skirmish.Options);
+            LauncherLog.Step("campaign", "speed dump:\n" + LauncherCore.BuildSpeedDiagnosticsDump(_cfg, effectiveUi));
+            var verify = LauncherCore.VerifyLaunchedSpeedValues(_cfg, effectiveUi, expectSpawn: true);
+            if (verify != null)
+            {
+                LauncherLog.Warn("speed verify mismatch: " + verify);
+                ShowToast(L10n.T("Проверьте скорость: значения в ini/spawn отличаются от ожидаемых."));
+            }
 
-            CompanyStatus.Text = L10n.F("Запуск миссии: {0} ({1}).", mission.DisplayName, mission.LaunchScenario);
+            CompanyStatus.Text = L10n.F("Запуск миссии: {0} ({1}) · Скорость: {2}.", mission.DisplayName, mission.LaunchScenario, LauncherCore.GameSpeedLabel(effectiveUi));
 
             LauncherCore.SaveActiveIds(_mods, _active, _cfg);
             var started = LauncherCore.LaunchSpawnedGame(_cfg);
@@ -1610,6 +1782,24 @@ public partial class MainWindow : Window
             SkirmishStatus.Text = L10n.T("Позиции карты не определены");
         else
             SkirmishStatus.Text = L10n.F("Будет загружено модов: {0}", ActiveModCount());
+
+        if (SkirmishSpeedInfo != null)
+        {
+            var requestedUi = LauncherCore.NormalizeUiGameSpeed(_cfg.Skirmish.Options.GameSpeed);
+            var constraint = LauncherCore.GetSkirmishSpeedConstraint(_cfg.Skirmish.SelectedMode);
+            var effectiveUi = constraint.ApplyUi(requestedUi);
+            var text = L10n.F("Скорость: {0}", LauncherCore.GameSpeedLabel(effectiveUi));
+            if (constraint.Disable)
+                text += " · " + L10n.T("зафиксирована режимом/картой");
+            else if (effectiveUi != requestedUi)
+                text += " · " + L10n.F("ограничено с {0}", LauncherCore.GameSpeedLabel(requestedUi));
+            else if (constraint.MaxEngineSpeed is int cap)
+                text += L10n.F(" (лимит: {0})", LauncherCore.GameSpeedLabel(LauncherCore.EngineToUiGameSpeed(cap)));
+            SkirmishSpeedInfo.Text = text;
+            SkirmishSpeedInfo.Foreground = (constraint.Disable || effectiveUi != requestedUi)
+                ? new SolidColorBrush(Color.FromRgb(0xE6, 0xB8, 0x5C))
+                : new SolidColorBrush(Color.FromRgb(0xC9, 0xCC, 0xD3));
+        }
     }
 
     private void SelectMod(ModInfo m)
@@ -1897,13 +2087,22 @@ public partial class MainWindow : Window
                 SaveSkirmishState();
             }, 120));
 
-        var speeds = new[] { "1", "2", "3", "4", "5", "6" };
-        AddOptionRow(1, "Game speed",
-            SettingCombo(speeds, speeds.ToList().IndexOf(o.GameSpeed.ToString()), idx =>
+        var speeds = LauncherCore.GameSpeedLabels().ToList();
+        var speedConstraint = LauncherCore.GetSkirmishSpeedConstraint(_cfg.Skirmish.SelectedMode);
+        var speedCombo = SettingCombo(speeds, Math.Clamp(LauncherCore.NormalizeUiGameSpeed(o.GameSpeed), 1, 7) - 1, idx =>
+        {
+            if (idx >= 0 && idx < speeds.Count)
             {
-                if (idx >= 0 && idx < speeds.Length) o.GameSpeed = int.Parse(speeds[idx]);
+                o.GameSpeed = LauncherCore.ParseUiGameSpeedLabel(speeds[idx], o.GameSpeed);
                 SaveSkirmishState();
-            }, 120));
+                UpdateSkirmishStatus();
+            }
+        }, 120);
+        speedCombo.IsEnabled = !speedConstraint.Disable;
+        speedCombo.ToolTip = speedConstraint.Disable
+            ? speedConstraint.DescribeLock(o.GameSpeed)
+            : (speedConstraint.MaxEngineSpeed is int cap ? L10n.F("Ограничение режима/карты: не быстрее «{0}».", LauncherCore.GameSpeedLabel(LauncherCore.EngineToUiGameSpeed(cap))) : null);
+        AddOptionRow(1, L10n.T("Скорость игры"), speedCombo);
 
         var units = new[] { "10", "9", "8", "7", "6", "5", "4", "3", "2", "1", "0" };
         AddOptionRow(2, "Starting units",
@@ -2569,16 +2768,26 @@ public partial class MainWindow : Window
         var source = _mapCatalog.MapsForMode(_currentMapMode);
         var filtered = source.Where(MapMatchesFilter).ToList();
 
+        _cfg.Skirmish.FavoriteMaps ??= new List<string>();
+        var favs = new HashSet<string>(_cfg.Skirmish.FavoriteMaps, StringComparer.OrdinalIgnoreCase);
+        foreach (var m in filtered) m.IsFavorite = !string.IsNullOrWhiteSpace(m.Relative) && favs.Contains(m.Relative);
+
+        var ordered = filtered
+            .OrderByDescending(m => m.IsFavorite)
+            .ThenBy(m => m.MaxPlayers)
+            .ThenBy(m => MapCatalog.NameWithoutPrefix(m.DisplayName), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         MapList.ItemsSource = null;
         MapList.Items.Clear();
-        foreach (var m in filtered) MapList.Items.Add(m);
+        foreach (var m in ordered) MapList.Items.Add(m);
 
         // Search in current mode only; offer "search in all" on empty filtered result.
-        if (filtered.Count == 0 && _mapFilter.Length > 0)
+        if (ordered.Count == 0 && _mapFilter.Length > 0)
         {
             MapSearchEmpty.Visibility = Visibility.Visible;
-            MapSearchEmptyText.Text = L10n.F("Ничего не найдено в режиме {0}. Искать во всех?", CurrentModeLabel());
-            MapSearchAllLink.Text = L10n.T("Искать во всех");
+            MapSearchEmptyText.Text = L10n.F("��祣� �� ������� � ०��� {0}. �᪠�� �� ���?", CurrentModeLabel());
+            MapSearchAllLink.Text = L10n.T("�᪠�� �� ���");
             MapSearchAllLink.Visibility = _currentMapMode == MapCatalog.AllMapsMode ? Visibility.Collapsed : Visibility.Visible;
         }
         else
@@ -2593,6 +2802,7 @@ public partial class MainWindow : Window
         if (restore != null)
         {
             MapList.SelectedItem = restore;
+            MapList.ScrollIntoView(restore);
             ShowMapDetails(restore);
         }
         else
@@ -2600,14 +2810,14 @@ public partial class MainWindow : Window
             _currentMapMaxPlayers = LauncherCore.MaxSkirmishSlots;
             _currentMapMaxPlayersKnown = false;
             var msg = _mapFilter.Length > 0
-                ? L10n.F("По фильтру «{0}» ничего не найдено.", _mapFilter)
-                : L10n.T("Карты не найдены в корне игры и в Maps\\.");
+                ? L10n.F("�� 䨫���� <{0}> ��祣� �� �������.", _mapFilter)
+                : L10n.T("����� �� ������� � ��୥ ���� � � Maps\\.");
             MapName.Text = msg;
             MapPath.Text = "";
             MapSize.Text = "";
             MapPreview.Source = null;
             MapPreview.Visibility = Visibility.Collapsed;
-            MapPreviewEmpty.Text = L10n.T("Превью нет");
+            MapPreviewEmpty.Text = L10n.T("�ॢ�� ���");
             MapPreviewEmpty.Visibility = Visibility.Visible;
             UpdateSettingsMapBrief();
             BuildPlayerTable();
@@ -2655,6 +2865,25 @@ public partial class MainWindow : Window
         if (all != null && CmbMapMode != null) CmbMapMode.SelectedItem = all; // triggers mode change + refresh
     }
 
+    private void MapFavorite_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not FrameworkElement fe || fe.DataContext is not MapEntry map) return;
+        if (string.IsNullOrWhiteSpace(map.Relative)) return;
+
+        _cfg.Skirmish.FavoriteMaps ??= new List<string>();
+        var existing = _cfg.Skirmish.FavoriteMaps.FirstOrDefault(x =>
+            string.Equals(x, map.Relative, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+            _cfg.Skirmish.FavoriteMaps.Remove(existing);
+        else
+            _cfg.Skirmish.FavoriteMaps.Add(map.Relative);
+
+        map.IsFavorite = existing == null;
+        SaveSkirmishState();
+        RefreshMaps();
+    }
+
     private void CmbMapMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncing || CmbMapMode?.SelectedItem is not MapModeItem mi) return;
@@ -2664,6 +2893,8 @@ public partial class MainWindow : Window
         ApplyMapSearchFilter(refresh: false);
         // If saved/selected map is not in this mode, switching to "All maps" is handled by refresh+resolve on load;
         // on user switch keep selection if present in new mode, else refresh will pick first.
+        BuildSettingsPanel();
+        UpdateSkirmishStatus();
         SaveSkirmishState();
         RefreshMaps();
     }
@@ -2793,15 +3024,41 @@ public partial class MainWindow : Window
             if (modConflict != null) LauncherLog.Warn("active mod conflict: " + modConflict);
 
             LauncherCore.SaveActiveIds(_mods, _active, _cfg);
-            LauncherCore.ApplySkirmishGameSpeed(_cfg.Skirmish.Options);
-            SkirmishSpawn.Write(_cfg.Skirmish, map);
+            LauncherCore.SaveActiveIds(_mods, _active, _cfg);
+            var speedConstraint = LauncherCore.GetSkirmishSpeedConstraint(_cfg.Skirmish.SelectedMode);
+            var requestedUi = LauncherCore.NormalizeUiGameSpeed(_cfg.Skirmish.Options.GameSpeed);
+            var effectiveUi = speedConstraint.ApplyUi(requestedUi);
+            if (speedConstraint.Disable || effectiveUi != requestedUi)
+            {
+                var msg = speedConstraint.DescribeLock(requestedUi) ?? L10n.F("Скорость скорректирована ограничением режима/карты: «{0}».", LauncherCore.GameSpeedLabel(effectiveUi));
+                LauncherLog.Warn("skirmish speed constraint: " + msg + $" (requested ui={requestedUi}, effective ui={effectiveUi})");
+                ShowToast(msg);
+            }
+            var originalUi = _cfg.Skirmish.Options.GameSpeed;
+            _cfg.Skirmish.Options.GameSpeed = effectiveUi;
+            try
+            {
+                LauncherCore.ApplySkirmishGameSpeed(_cfg.Skirmish.Options);
+                SkirmishSpawn.Write(_cfg.Skirmish, map);
+            }
+            finally
+            {
+                _cfg.Skirmish.Options.GameSpeed = originalUi;
+            }
+            LauncherLog.Step("skirmish", "speed dump:\n" + LauncherCore.BuildSpeedDiagnosticsDump(_cfg, effectiveUi));
+            var verify = LauncherCore.VerifyLaunchedSpeedValues(_cfg, effectiveUi, expectSpawn: true);
+            if (verify != null)
+            {
+                LauncherLog.Warn("speed verify mismatch: " + verify);
+                ShowToast(L10n.T("Проверьте скорость: значения в ini/spawn отличаются от ожидаемых."));
+            }
 
             var mapName = string.IsNullOrWhiteSpace(map.DisplayName) ? map.Name : map.DisplayName;
             var aiSummary = string.Join(", ", _cfg.Skirmish.Players
                 .Where(p => !p.IsHuman)
                 .Select(p => AiDifficultyName(p.AiLevel)));
-            if (aiSummary.Length == 0) aiSummary = "—";
-            SkirmishStatus.Text = L10n.F("Запуск: {0} · ИИ: {1}.", mapName, aiSummary);
+            if (aiSummary.Length == 0) aiSummary = "-";
+            SkirmishStatus.Text = L10n.F("Карта: {0} · ИИ: {1} · Скорость: {2}.", mapName, aiSummary, LauncherCore.GameSpeedLabel(effectiveUi));
 
             var started = LauncherCore.LaunchSpawnedGame(_cfg);
             var gameProcess = Path.GetFileNameWithoutExtension(
@@ -2857,15 +3114,10 @@ public partial class MainWindow : Window
 
         settings.DetailLevel = Math.Max(0, CmbDetail.SelectedIndex);
         settings.Difficulty = Math.Max(0, CmbDifficulty.SelectedIndex);
-        if (CmbGameSpeed.SelectedItem is int speed)
-        {
-            settings.GameSpeed = speed;
-            // The skirmish screen applies its own speed at launch, so the
-            // value the player picks here has to go there as well - otherwise
-            // the game silently runs at a different speed than the one that
-            // was just chosen.
-            _cfg.Skirmish.Options.GameSpeed = speed;
-        }
+        var speedUi = LauncherCore.ParseUiGameSpeedLabel(CmbGameSpeed.SelectedItem, _cfg.Skirmish.Options.GameSpeed);
+        // Persist as engine value (0..6) in RA2MD.ini/client settings; keep UI value (1..7) in skirmish options.
+        settings.GameSpeed = LauncherCore.UiToEngineGameSpeed(speedUi);
+        _cfg.Skirmish.Options.GameSpeed = speedUi;
         if (CmbRenderer.SelectedItem is KeyValuePair<string, string> renderer) settings.Renderer = renderer.Key;
 
         var windowed = ChkWindowed.IsChecked == true;
