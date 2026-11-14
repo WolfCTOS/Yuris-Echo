@@ -1019,6 +1019,9 @@ public partial class MainWindow : Window
 
     private void BtnLoadSave_Click(object sender, EventArgs e) => ShowLoadSave();
 
+    /// <summary>Opens the save screen right away (used by the --open-saves flag).</summary>
+    public void OpenSaveScreen() => ShowLoadSave();
+
     /// <summary>Saved games screen, laid out like the skirmish screen (list + details + actions).</summary>
     private void ShowLoadSave()
     {

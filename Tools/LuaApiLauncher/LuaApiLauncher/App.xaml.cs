@@ -94,6 +94,9 @@ public partial class App : Application
 
             var window = new MainWindow();
             MainWindow = window;
+            // "--open-saves" starts on the save screen instead of the main menu.
+            if (e.Args.Any(a => string.Equals(a, "--open-saves", StringComparison.OrdinalIgnoreCase)))
+                window.Loaded += (_, _) => window.OpenSaveScreen();
             window.Show();
         }
         catch (Exception ex)
