@@ -447,7 +447,7 @@
             <Grid x:Name="LoadSaveView" Visibility="Collapsed" Margin="28,18,28,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <StackPanel Orientation="Horizontal">
@@ -465,12 +465,12 @@
                         <ColumnDefinition Width="380" MinWidth="340"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- list of saves / replays -->
+                    <!-- list of saves / replays; the panel ends with the list -->
                     <Border Grid.Column="0" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
                         <Grid Margin="12">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <StackPanel Orientation="Horizontal">
@@ -480,10 +480,12 @@
                                              Style="{StaticResource SideTab}"/>
                             </StackPanel>
 
-                            <Border Grid.Row="1" Background="#0F131B" BorderBrush="#2A303C" BorderThickness="1" Margin="0,8,0,0">
+                            <Border Grid.Row="1" Background="#0F131B" BorderBrush="#2A303C" BorderThickness="1"
+                                    Margin="0,8,0,0" MinHeight="150">
                                 <Grid>
                                     <ListBox x:Name="SaveList" Background="Transparent" BorderThickness="0" Foreground="#C9CCD3"
                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             MaxHeight="440"
                                              SelectionChanged="SaveList_SelectionChanged"
                                              MouseDoubleClick="SaveList_MouseDoubleClick">
                                         <ListBox.ItemTemplate>
@@ -509,28 +511,26 @@
                         </Grid>
                     </Border>
 
-                    <!-- details + actions -->
+                    <!-- details + actions; the buttons sit in the middle of the panel -->
                     <Border Grid.Column="2" Background="#CC11151D" BorderBrush="#343A47" BorderThickness="1">
                         <Grid Margin="12">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Text="СОХРАНЕНИЕ" FontSize="11" Foreground="#9AA0AC" Margin="4,0,0,8"/>
+                            <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                                <TextBlock Text="СОХРАНЕНИЕ" FontSize="11" Foreground="#9AA0AC" Margin="4,0,0,8"/>
 
-                            <StackPanel Grid.Row="1">
                                 <TextBlock x:Name="SaveDetailsName" FontSize="14" FontWeight="SemiBold" Foreground="#C9CCD3"
                                            TextWrapping="Wrap"/>
                                 <TextBlock x:Name="SaveDetailsMeta" FontSize="10" Foreground="#9AA0AC" Margin="0,4,0,0"
                                            TextWrapping="Wrap"/>
                                 <TextBlock x:Name="SaveDetailsHint" FontSize="10" Foreground="#E6B85C" Margin="0,6,0,0"
                                            TextWrapping="Wrap"/>
-                            </StackPanel>
 
-                            <StackPanel Grid.Row="2">
-                                <Button x:Name="BtnLoadSaveStart" Content="ЗАГРУЗИТЬ" Height="40"
+                                <Button x:Name="BtnLoadSaveStart" Content="ЗАГРУЗИТЬ" Height="40" Margin="0,16,0,0"
                                         Style="{StaticResource SmallButton}" Foreground="#E6E8EC"
                                         Click="BtnLoadSaveStart_Click"/>
                                 <Button x:Name="BtnLoadSaveDelete" Content="УДАЛИТЬ" Height="40" Margin="0,8,0,0"
