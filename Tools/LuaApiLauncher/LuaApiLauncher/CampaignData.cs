@@ -208,7 +208,7 @@ public static class CampaignData
     public static void WriteSpawnIni(CampaignMission mission, int difficulty, int gameSpeed, SkirmishOptions? options = null)
     {
         var diff = Math.Clamp(difficulty, 0, 2);
-        var speed = Math.Clamp(gameSpeed, 0, 6);
+        var speed = LauncherCore.UiToEngineGameSpeed(gameSpeed);
         var ra2Mode = mission.Id.StartsWith("RA2_", StringComparison.OrdinalIgnoreCase)
                       || mission.Scenario.Contains("RA2->", StringComparison.OrdinalIgnoreCase);
         var sideIndex = mission.SideName.Equals("Soviet", StringComparison.OrdinalIgnoreCase) ? 1 : 0;

@@ -546,7 +546,7 @@ public partial class MainWindow : Window
         CmbClientRes.Text = settings.ResolutionX + "x" + settings.ResolutionY;
         CmbDetail.SelectedIndex = Math.Clamp(settings.DetailLevel, 0, 2);
         CmbDifficulty.SelectedIndex = Math.Clamp(settings.Difficulty, 0, 2);
-        CmbGameSpeed.SelectedItem = settings.GameSpeed;
+        CmbGameSpeed.SelectedItem = LauncherCore.EngineToUiGameSpeed(settings.GameSpeed);
         if (CmbGameSpeed.SelectedItem == null) CmbGameSpeed.SelectedIndex = 0;
         SelectKey(CmbRenderer, settings.Renderer);
         SelectKey(CmbLanguage, L10n.Normalize(_cfg.Language));
@@ -709,7 +709,7 @@ public partial class MainWindow : Window
             // Defaults aligned with typical client defaults; only UI fields.
             CmbDetail.SelectedIndex = 2;
             CmbDifficulty.SelectedIndex = 1;
-            CmbGameSpeed.SelectedIndex = 5; // 6
+            CmbGameSpeed.SelectedIndex = 6; // 7 = fastest (UI)
             if (CmbRenderer.Items.Count > 0) CmbRenderer.SelectedIndex = 0;
             var langIdx = 0;
             for (int i=0;i<CmbLanguage.Items.Count;i++) if (CmbLanguage.Items[i] is System.Collections.Generic.KeyValuePair<string,string> kv && L10n.Normalize(kv.Key)==L10n.English) { langIdx=i; break; }
@@ -843,7 +843,7 @@ public partial class MainWindow : Window
 
         CmbDetail.ItemsSource = new[] { L10n.T("Низкая"), L10n.T("Средняя"), L10n.T("Высокая") };
         CmbDifficulty.ItemsSource = new[] { L10n.T("Легко"), L10n.T("Нормально"), L10n.T("Сложно") };
-        CmbGameSpeed.ItemsSource = new[] { 1, 2, 3, 4, 5, 6 };
+        CmbGameSpeed.ItemsSource = new[] { 1, 2, 3, 4, 5, 6, 7 };
         CmbRenderer.ItemsSource = LauncherCore.ScanRenderers();
         CmbLanguage.ItemsSource = LauncherCore.ScanLanguages();
     }
@@ -1897,9 +1897,9 @@ public partial class MainWindow : Window
                 SaveSkirmishState();
             }, 120));
 
-        var speeds = new[] { "1", "2", "3", "4", "5", "6" };
+        var speeds = new[] { "1", "2", "3", "4", "5", "6", "7" };
         AddOptionRow(1, "Game speed",
-            SettingCombo(speeds, speeds.ToList().IndexOf(o.GameSpeed.ToString()), idx =>
+            SettingCombo(speeds, Math.Clamp(o.GameSpeed, 1, 7) - 1, idx =>
             {
                 if (idx >= 0 && idx < speeds.Length) o.GameSpeed = int.Parse(speeds[idx]);
                 SaveSkirmishState();
@@ -2889,11 +2889,8 @@ public partial class MainWindow : Window
         settings.Difficulty = Math.Max(0, CmbDifficulty.SelectedIndex);
         if (CmbGameSpeed.SelectedItem is int speed)
         {
-            settings.GameSpeed = speed;
-            // The skirmish screen applies its own speed at launch, so the
-            // value the player picks here has to go there as well - otherwise
-            // the game silently runs at a different speed than the one that
-            // was just chosen.
+            // Persist as engine value (0..6) in RA2MD.ini/client settings; keep UI value (1..7) in skirmish options.
+            settings.GameSpeed = LauncherCore.UiToEngineGameSpeed(speed);
             _cfg.Skirmish.Options.GameSpeed = speed;
         }
         if (CmbRenderer.SelectedItem is KeyValuePair<string, string> renderer) settings.Renderer = renderer.Key;

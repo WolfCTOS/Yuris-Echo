@@ -112,7 +112,7 @@ public static class SkirmishSpawn
         sb.AppendLine("Bases=Yes");
         sb.AppendLine("Credits=" + Math.Max(0, o.Credits));
         sb.AppendLine("UnitCount=" + Math.Max(0, o.UnitCount));
-        sb.AppendLine("GameSpeed=" + Math.Clamp(o.GameSpeed, 1, 6));
+        sb.AppendLine("GameSpeed=" + LauncherCore.UiToEngineGameSpeed(o.GameSpeed));
         sb.AppendLine("ShortGame=" + YesNo(o.ShortGame));
         sb.AppendLine("BridgeDestroy=" + YesNo(o.BridgeDestroy));
         sb.AppendLine("BuildOffAlly=" + YesNo(o.BuildOffAlly));

@@ -402,10 +402,10 @@ public sealed class SkirmishOptions
 {
     public int Credits { get; set; } = 10000;      // cmbCredits default index 5
     /// <summary>
-    /// Game speed: 1 is the slowest, 6 the fastest. The game's own default is
-    /// 6, and the launcher uses the same value on both screens.
+    /// UI game speed: 1 = slowest, 7 = fastest (7 levels). Converted to the
+    /// engine/spawner value 0..6 (0 fastest, 6 slowest) when launching.
     /// </summary>
-    public int GameSpeed { get; set; } = 6;         // cmbGameSpeedCap default index 0
+    public int GameSpeed { get; set; } = 7;         // fastest by default
     public int UnitCount { get; set; } = 0;         // cmbStartingUnits default index 10
     public bool ShortGame { get; set; } = true;     // chkShortGame
     public bool BridgeDestroy { get; set; } = true; // chkDestrBridges
@@ -721,12 +721,30 @@ public static class LauncherCore
         {
             var path = Path.Combine(Root, "RA2MD.INI");
             var ini = IniFile.Load(path);
-            ini.Set("Options", "GameSpeed", Math.Clamp(options.GameSpeed, 1, 6).ToString());
+            var speed = UiToEngineGameSpeed(options.GameSpeed).ToString();
+            // [Options] is the canonical location; some modes/installations also
+            // keep a per-mode GameSpeed key. Update every section that already
+            // defines it so a stale value (e.g. Skirmish/LAN left at 1) cannot
+            // override the selected speed on launch.
+            ini.Set("Options", "GameSpeed", speed);
+            var sections = ini.Sections().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var section in sections)
+            {
+                if (section.Equals("Options", StringComparison.OrdinalIgnoreCase)) continue;
+                if (ini.Get(section, "GameSpeed") != null)
+                    ini.Set(section, "GameSpeed", speed);
+            }
             ini.Save(path);
-            LauncherLog.Step("skirmish", $"RA2MD.INI GameSpeed = {Math.Clamp(options.GameSpeed, 1, 6)}");
+            LauncherLog.Step("skirmish", $"RA2MD.INI GameSpeed = {speed} (ui {options.GameSpeed})");
         }
         catch (Exception ex) { LauncherLog.Error("Failed to apply the skirmish game speed", ex); }
     }
+
+    /// <summary>UI speed 1..7 (1 slowest, 7 fastest) -> engine/spawner 0..6 (0 fastest, 6 slowest).</summary>
+    public static int UiToEngineGameSpeed(int uiSpeed) => 7 - Math.Clamp(uiSpeed, 1, 7);
+
+    /// <summary>Engine/spawner speed 0..6 (0 fastest, 6 slowest) -> UI speed 1..7 (1 slowest, 7 fastest).</summary>
+    public static int EngineToUiGameSpeed(int engineSpeed) => 7 - Math.Clamp(engineSpeed, 0, 6);
 
     /// <summary>
     /// Factions for the skirmish player table, taken from the rules file.
