@@ -28,16 +28,15 @@ public sealed class FactionChoice
     public ImageSource? Icon { get; }
 
     /// <summary>
-    /// The template of the drop down entries: the icon in the first column,
-    /// the name in the second one. The name takes the rest of the width and
-    /// is cut off with an ellipsis when it does not fit, so a long name like
-    /// "European Union" never reaches the drop down arrow.
+    /// The entry of the closed box and of the open list: the icon in the
+    /// first column, the name in the second one. A faction without an icon
+    /// leaves that column empty, so the name has the whole width of the
+    /// field and a long name like "European Union" fits next to the arrow.
+    /// A name that still does not fit is cut off with an ellipsis.
     /// </summary>
-    public static DataTemplate ItemTemplate { get; } = BuildTemplate();
+    public static DataTemplate ItemTemplate { get; } = (DataTemplate)XamlReader.Parse(IconXaml);
 
-    private static DataTemplate BuildTemplate()
-    {
-        const string xaml = @"
+    private const string IconXaml = @"
 <DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
              xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
   <Grid>
@@ -62,7 +61,4 @@ public sealed class FactionChoice
                TextTrimming=""CharacterEllipsis""/>
   </Grid>
 </DataTemplate>";
-
-        return (DataTemplate)XamlReader.Parse(xaml);
-    }
 }

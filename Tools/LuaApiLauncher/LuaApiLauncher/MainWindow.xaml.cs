@@ -2148,8 +2148,14 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------------- skirmish: players
 
-    /// <summary>Table columns: slot, name, faction, colour, team, start, AI difficulty, remove.</summary>
-    private static readonly double[] PlayerColWidths = { 30, 0, 140, 64, 56, 52, 52, 22 };
+    /// <summary>
+    /// Table columns: slot, name, faction, colour, team, start, AI difficulty, remove.
+    /// A combo box spends 8 px on the left and 26 px on the arrow, so the text
+    /// of a field gets "width - 38" pixels. The widths are sized after the
+    /// text they have to show: "European Union" (79 px), "Green" (30 px),
+    /// "Medium" (39 px).
+    /// </summary>
+    private static readonly double[] PlayerColWidths = { 22, 0, 120, 70, 48, 48, 80, 22 };
 
     private const int PlayerNameColumn = 1;
     private const int PlayerDifficultyColumn = 6;
@@ -2357,9 +2363,9 @@ public partial class MainWindow : Window
                 BorderBrush = Theme.StrokeB,
                 BorderThickness = new Thickness(1),
                 CaretBrush = Theme.AccentB,
-                Padding = new Thickness(6, 2, 6, 2),
+                Padding = new Thickness(4, 2, 4, 2),
                 VerticalContentAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(2, 0, 6, 0)
+                Margin = new Thickness(2, 0, 4, 0)
             };
             name.TextChanged += (_, _) =>
             {
