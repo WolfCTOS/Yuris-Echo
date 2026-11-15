@@ -239,7 +239,13 @@ public static class CampaignData
 
         // The options the CnCNet client always writes (Resources\GameOptions.ini).
         foreach (var (key, value) in ReadForcedSpawnIniOptions())
+        {
+            // The launcher has its own superweapon switch; the client's global
+            // value must not overwrite the one the player picked.
+            if (key.Equals("Superweapons", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("chkSuperWeapons", StringComparison.OrdinalIgnoreCase)) continue;
             sb.AppendLine(key + "=" + value);
+        }
 
         // The skirmish options of the launcher - the spawner applies them.
         if (options != null)
@@ -253,7 +259,8 @@ public static class CampaignData
             sb.AppendLine("MCVRedeploy=" + YesNo(options.MCVRedeploy));
             sb.AppendLine("AlliesAllowed=" + YesNo(options.AlliesAllowed));
             sb.AppendLine("Crates=" + YesNo(options.Crates));
-            sb.AppendLine("Superweapons=" + YesNo(options.SuperWeapons != 3));
+            // The game's superweapon switch (GameModeOptionsClass::SWAllowed).
+            sb.AppendLine("Superweapons=" + YesNo(SuperWeaponModes.GlobalSwitchOn(options.SuperWeapons)));
         }
 
         // Auto save every 4 minutes, like the client's mission selector does.

@@ -176,10 +176,18 @@ public static class L10n
         ["СКОРОСТЬ ИГРЫ"] = "GAME SPEED",
         ["СТАРТОВЫЕ ВОЙСКА"] = "STARTING UNITS",
         ["СУПЕРООРУЖИЕ"] = "SUPER WEAPONS",
+        ["Стартовые деньги"] = "Starting credits",
+        ["Скорость игры"] = "Game speed",
+        ["Стартовые войска"] = "Starting units",
+        ["Супероружие"] = "Super weapons",
         ["Все"] = "All",
         ["Стратегические"] = "Strategic",
         ["Тактические"] = "Tactical",
         ["Нет"] = "None",
+        ["All - все супероружия. Strategic - только наступательные (нук, гроза, пси-доминатор). Tactical - только оборонительные (хроносфера, железный занавес, силовой щит, генетический конвертер). None - без супероружий. В кампании настройка не действует."] =
+            "All - every superweapon. Strategic - only the offensive ones (nuke, lightning storm, psychic dominator). Tactical - only the defensive ones (chrono sphere, iron curtain, force shield, genetic converter). None - no superweapons. Campaigns ignore this setting.",
+        ["Проверьте настройку супероружия: значения в ini/spawn отличаются от ожидаемых."] =
+            "Check the superweapon setting: the values in ini/spawn differ from the expected ones.",
         ["Короткая игра"] = "Short game",
         ["Автопочинка"] = "Auto repair",
         ["Мульти-инженер"] = "Multi engineer",

@@ -126,12 +126,16 @@ public static class SkirmishSpawn
         sb.AppendLine("MCVRedeploy=" + YesNo(o.MCVRedeploy));
         sb.AppendLine("AlliesAllowed=" + YesNo(o.AlliesAllowed));
         sb.AppendLine("Crates=" + YesNo(o.Crates));
+        // The game's superweapon switch (GameModeOptionsClass::SWAllowed).
+        sb.AppendLine("Superweapons=" + YesNo(SuperWeaponModes.GlobalSwitchOn(o.SuperWeapons)));
 
         // The CnCNet client writes these last, so a mod's forced values win.
-        // Superweapons are applied through the map code below, like CnCNet does.
         foreach (var (key, value) in CampaignData.ReadForcedSpawnIniOptions())
         {
             if (string.IsNullOrWhiteSpace(key)) continue;
+            // The launcher has its own superweapon switch; the client's global
+            // value must not overwrite the one the player picked.
+            if (IsSuperWeaponKey(key)) continue;
             sb.AppendLine(key + "=" + value);
         }
 
@@ -140,11 +144,14 @@ public static class SkirmishSpawn
         {
             if (string.IsNullOrWhiteSpace(kv.Key)) continue;
             if (kv.Key.Equals("GameMode", StringComparison.OrdinalIgnoreCase)) continue;
+            if (IsSuperWeaponKey(kv.Key)) continue;
             sb.AppendLine(kv.Key + "=" + kv.Value);
         }
         // Re-assert computed speed/lock after forced merges so UI selection/cap is honored.
         sb.AppendLine("GameSpeed=" + LauncherCore.UiToEngineGameSpeed(effectiveUiSpeed));
         if (disableSpeed) sb.AppendLine("DisableGameSpeed=Yes");
+        // The superweapon switch belongs to the launcher, so it is written last.
+        sb.AppendLine("Superweapons=" + YesNo(SuperWeaponModes.GlobalSwitchOn(o.SuperWeapons)));
 
         sb.AppendLine();
         sb.AppendLine("[HouseHandicaps]");
@@ -177,8 +184,8 @@ public static class SkirmishSpawn
 
     /// <summary>
     /// spawnmap.ini starts as a copy of the selected map, then the selected map
-    /// code options (auto repair, in-game allying, superweapons) are merged in,
-    /// the same way the CnCNet client's lobby options are applied.
+    /// code options (auto repair, in-game allying) and the superweapon mode are
+    /// merged in, the same way the CnCNet client's lobby options are applied.
     /// </summary>
     private static void WriteSpawnMap(MapEntry map, SkirmishOptions options)
     {
@@ -193,16 +200,28 @@ public static class SkirmishSpawn
         if (options.AlliesAllowed)
             MergeMapCode(ini, "INI/Game Options/Allies Allowed.ini");
 
-        var superWeapons = options.SuperWeapons switch
-        {
-            1 => "Offensive.ini",
-            2 => "Defensive.ini",
-            3 => "Disabled.ini",
-            _ => "All.ini"
-        };
-        MergeMapCode(ini, "INI/Game Options/SuperWeapons/" + superWeapons);
+        // The superweapon mode is written as map code: the scenario is parsed
+        // as rules when the game loads it, so the DisableableFromShell flag of
+        // every superweapon type decides which ones the game's own superweapon
+        // switch (spawn.ini Superweapons) turns off.
+        ApplySuperWeaponMapCode(ini, options.SuperWeapons);
 
         ini.Save(SpawnMapPath);
+    }
+
+    /// <summary>
+    /// Writes the DisableableFromShell flag of every superweapon type into the
+    /// map copy. The game hands a superweapon out (and lets the AI build it)
+    /// only when the type is not disableable or the superweapon switch is on.
+    /// </summary>
+    private static void ApplySuperWeaponMapCode(IniFile ini, int mode)
+    {
+        mode = SuperWeaponModes.Clamp(mode);
+        foreach (var type in SuperWeaponModes.Types())
+        {
+            var disableable = SuperWeaponModes.DisableableFromShell(mode, type);
+            ini.Set(type, "DisableableFromShell", disableable ? "yes" : "no");
+        }
     }
 
     private static void MergeMapCode(IniFile target, string relativePath)
@@ -217,6 +236,15 @@ public static class SkirmishSpawn
     }
 
     private static string YesNo(bool value) => value ? "Yes" : "No";
+
+    /// <summary>
+    /// True for the spawn.ini keys that carry the superweapon switch. The
+    /// launcher writes its own value for them, so a forced value from the
+    /// client or from a map cannot overwrite the player's choice.
+    /// </summary>
+    private static bool IsSuperWeaponKey(string key) =>
+        key.Equals("Superweapons", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("chkSuperWeapons", StringComparison.OrdinalIgnoreCase);
 
     private static string CleanValue(string value) =>
         value.Replace('\r', ' ').Replace('\n', ' ').Trim();

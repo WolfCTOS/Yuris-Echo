@@ -2083,7 +2083,7 @@ public partial class MainWindow : Window
         }
 
         var credits = new[] { "100000", "30000", "20000", "15000", "12500", "10000", "7500", "5000", "2500" };
-        AddOptionRow(0, "Starting credits",
+        AddOptionRow(0, L10n.T("Стартовые деньги"),
             SettingCombo(credits, credits.ToList().IndexOf(o.Credits.ToString()), idx =>
             {
                 if (idx >= 0 && idx < credits.Length) o.Credits = int.Parse(credits[idx]);
@@ -2108,20 +2108,21 @@ public partial class MainWindow : Window
         AddOptionRow(1, L10n.T("Скорость игры"), speedCombo);
 
         var units = new[] { "10", "9", "8", "7", "6", "5", "4", "3", "2", "1", "0" };
-        AddOptionRow(2, "Starting units",
+        AddOptionRow(2, L10n.T("Стартовые войска"),
             SettingCombo(units, units.ToList().IndexOf(o.UnitCount.ToString()), idx =>
             {
                 if (idx >= 0 && idx < units.Length) o.UnitCount = int.Parse(units[idx]);
                 SaveSkirmishState();
             }, 120));
 
-        var superWeapons = new[] { "All", "Strategic", "Tactical", "None" };
-        AddOptionRow(3, "Super weapons",
-            SettingCombo(superWeapons, o.SuperWeapons, idx =>
-            {
-                o.SuperWeapons = idx;
-                SaveSkirmishState();
-            }, 120));
+        var superWeapons = SuperWeaponModes.Labels;
+        var superWeaponCombo = SettingCombo(superWeapons, SuperWeaponModes.Clamp(o.SuperWeapons), idx =>
+        {
+            o.SuperWeapons = SuperWeaponModes.Clamp(idx);
+            SaveSkirmishState();
+        }, 120);
+        superWeaponCombo.ToolTip = L10n.T("All - все супероружия. Strategic - только наступательные (нук, гроза, пси-доминатор). Tactical - только оборонительные (хроносфера, железный занавес, силовой щит, генетический конвертер). None - без супероружий. В кампании настройка не действует.");
+        AddOptionRow(3, L10n.T("Супероружие"), superWeaponCombo);
 
         SettingsPanel.Children.Add(optionsGrid);
 
@@ -2148,7 +2149,7 @@ public partial class MainWindow : Window
     // ---------------------------------------------------------------- skirmish: players
 
     /// <summary>Table columns: slot, name, faction, colour, team, start, AI difficulty, remove.</summary>
-    private static readonly double[] PlayerColWidths = { 30, 0, 86, 68, 60, 56, 84, 22 };
+    private static readonly double[] PlayerColWidths = { 30, 0, 140, 64, 56, 52, 52, 22 };
 
     private const int PlayerNameColumn = 1;
     private const int PlayerDifficultyColumn = 6;
@@ -2191,6 +2192,100 @@ public partial class MainWindow : Window
         Margin = new Thickness(0, 0, 4, 0),
         VerticalAlignment = VerticalAlignment.Center
     };
+
+    private static readonly Dictionary<string, ImageSource?> _factionIconCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static FrameworkElement FactionComboItem(string label, ImageSource? icon)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        if (icon != null)
+        {
+            panel.Children.Add(new Image
+            {
+                Source = icon,
+                Width = 21,
+                Height = 14,
+                Margin = new Thickness(0, 0, 6, 0),
+                Stretch = Stretch.Uniform,
+                SnapsToDevicePixels = true,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        return panel;
+    }
+
+    private static ImageSource? LoadFactionIcon(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        var normalized = key.Trim();
+        if (_factionIconCache.TryGetValue(normalized, out var cached)) return cached;
+
+        ImageSource? icon = null;
+        try
+        {
+            var baseDir = LauncherCore.Root;
+            foreach (var name in new[]
+                     {
+                         normalized + "icon.png",
+                         normalized + "Icon.png",
+                         normalized + ".png",
+                         normalized.Replace(" ", "") + "icon.png"
+                     })
+            {
+                var path = Path.Combine(baseDir, "Resources", name);
+                if (!File.Exists(path)) continue;
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(path, UriKind.Absolute);
+                bmp.DecodePixelHeight = 14;
+                bmp.EndInit();
+                bmp.Freeze();
+                icon = bmp;
+                break;
+            }
+        }
+        catch
+        {
+            icon = null;
+        }
+
+        _factionIconCache[normalized] = icon;
+        return icon;
+    }
+
+    private static ImageSource? ResolveFactionIcon(FactionOption faction, IReadOnlyList<CountryOption> countries)
+    {
+        CountryOption? primary = null;
+        if (faction.PrimaryIndex >= 0)
+            primary = countries.FirstOrDefault(c => c.Index == faction.PrimaryIndex);
+
+        var candidates = new List<string>();
+        void Add(string? s)
+        {
+            if (!string.IsNullOrWhiteSpace(s) && !candidates.Contains(s, StringComparer.OrdinalIgnoreCase))
+                candidates.Add(s);
+        }
+
+        Add(primary?.House);
+        Add(primary?.Name);
+        Add(primary?.Label);
+        Add(faction.Name);
+
+        foreach (var c in candidates)
+        {
+            var icon = LoadFactionIcon(c);
+            if (icon != null) return icon;
+        }
+        return null;
+    }
 
     // maxPlayers comes from MapCatalog/MapEntry (MPMaps.ini primary, waypoints fallback). No duplicate parsing.
 
@@ -2302,9 +2397,11 @@ public partial class MainWindow : Window
 
             // The rules decide which factions exist, so the table lists the
             // factions of rulesmd.ini. Random is stored as -1.
+            var countries = RulesCountries.Load();
             var side = PlayerCombo();
-            side.Items.Add(L10n.T("Случайно"));
-            foreach (var faction in factions) side.Items.Add(L10n.T(faction.Name));
+            side.Items.Add(FactionComboItem(L10n.T("Случайно"), null));
+            foreach (var faction in factions)
+                side.Items.Add(FactionComboItem(L10n.T(faction.Name), ResolveFactionIcon(faction, countries)));
             var picked = player.Country < 0 ? 0 : factions.FindIndex(f => f.PrimaryIndex == player.Country) + 1;
             side.SelectedIndex = picked > 0 ? Math.Clamp(picked, 1, side.Items.Count - 1) : 0;
             side.SelectionChanged += (_, _) =>
@@ -3054,6 +3151,16 @@ public partial class MainWindow : Window
             {
                 LauncherLog.Warn("speed verify mismatch: " + verify);
                 ShowToast(L10n.T("Проверьте скорость: значения в ini/spawn отличаются от ожидаемых."));
+            }
+
+            var swMode = SuperWeaponModes.Clamp(_cfg.Skirmish.Options.SuperWeapons);
+            LauncherLog.Step("skirmish", "superweapons: " + SuperWeaponModes.Describe(swMode)
+                + ", spawn.ini Superweapons=" + (SuperWeaponModes.GlobalSwitchOn(swMode) ? "Yes" : "No"));
+            var swVerify = LauncherCore.VerifyLaunchedSuperWeaponValues(_cfg, expectSpawn: true);
+            if (swVerify != null)
+            {
+                LauncherLog.Warn("superweapon verify mismatch: " + swVerify);
+                ShowToast(L10n.T("Проверьте настройку супероружия: значения в ini/spawn отличаются от ожидаемых."));
             }
 
             var mapName = string.IsNullOrWhiteSpace(map.DisplayName) ? map.Name : map.DisplayName;

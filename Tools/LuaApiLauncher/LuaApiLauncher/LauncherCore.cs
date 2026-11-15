@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -874,6 +874,9 @@ public static class LauncherCore
         // Migrate legacy stored UI speed (1..6) to current 1..7 UI scale.
         cfg.Options.GameSpeed = MigrateUiGameSpeed(cfg.Options.GameSpeed);
 
+        // A superweapon mode outside the known range falls back to "all".
+        cfg.Options.SuperWeapons = SuperWeaponModes.Clamp(cfg.Options.SuperWeapons);
+
         if (cfg.Players.Count > MaxSkirmishSlots)
             cfg.Players.RemoveRange(MaxSkirmishSlots, cfg.Players.Count - MaxSkirmishSlots);
 
@@ -1339,6 +1342,53 @@ public static class LauncherCore
                         problems.Add($"spawn.ini [Settings]={v}, expected {expectedEngine}");
                 }
             }
+            return problems.Count == 0 ? null : string.Join("; ", problems);
+        }
+        catch (Exception ex) { return "verify error: " + ex.Message; }
+    }
+
+    /// <summary>
+    /// Checks that the superweapon switch the player picked really reached the
+    /// files the spawner reads: spawn.ini carries the game's own switch, the
+    /// map copy carries the flag of every superweapon type. Returns null when
+    /// everything matches, otherwise a description of the mismatch.
+    /// </summary>
+    public static string? VerifyLaunchedSuperWeaponValues(LauncherConfig cfg, bool expectSpawn = true)
+    {
+        try
+        {
+            var mode = SuperWeaponModes.Clamp(cfg.Skirmish.Options.SuperWeapons);
+            var expected = SuperWeaponModes.GlobalSwitchOn(mode) ? "Yes" : "No";
+            var problems = new List<string>();
+
+            if (expectSpawn)
+            {
+                var spawnPath = Path.Combine(Root, "spawn.ini");
+                if (File.Exists(spawnPath))
+                {
+                    var spawn = IniFile.Load(spawnPath);
+                    var v = spawn.Get("Settings", "Superweapons");
+                    if (v == null) problems.Add("spawn.ini [Settings] Superweapons=(missing)");
+                    else if (!v.Equals(expected, StringComparison.OrdinalIgnoreCase))
+                        problems.Add($"spawn.ini [Settings] Superweapons={v}, expected {expected}");
+                }
+                else problems.Add("spawn.ini (not present)");
+            }
+
+            var mapPath = Path.Combine(Root, "spawnmap.ini");
+            if (File.Exists(mapPath))
+            {
+                var map = IniFile.Load(mapPath);
+                foreach (var type in SuperWeaponModes.Types())
+                {
+                    var expectedFlag = SuperWeaponModes.DisableableFromShell(mode, type) ? "yes" : "no";
+                    var v = map.Get(type, "DisableableFromShell");
+                    if (v == null) problems.Add($"spawnmap.ini [{type}] DisableableFromShell=(missing)");
+                    else if (!v.Equals(expectedFlag, StringComparison.OrdinalIgnoreCase))
+                        problems.Add($"spawnmap.ini [{type}] DisableableFromShell={v}, expected {expectedFlag}");
+                }
+            }
+
             return problems.Count == 0 ? null : string.Join("; ", problems);
         }
         catch (Exception ex) { return "verify error: " + ex.Message; }
