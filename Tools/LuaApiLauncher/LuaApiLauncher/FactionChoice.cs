@@ -1,8 +1,6 @@
 using System;
-using System.Globalization;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
+using System.Windows.Markup;
 using System.Windows.Media;
 
 namespace LuaApiLauncher;
@@ -30,58 +28,41 @@ public sealed class FactionChoice
     public ImageSource? Icon { get; }
 
     /// <summary>
-    /// The template of the drop down entries: the icon and the name as one
-    /// centered block. The grid is stretched so the block keeps the same
-    /// place in the closed box and in the open list.
+    /// The template of the drop down entries: the icon in the first column,
+    /// the name in the second one. The name takes the rest of the width and
+    /// is cut off with an ellipsis when it does not fit, so a long name like
+    /// "European Union" never reaches the drop down arrow.
     /// </summary>
     public static DataTemplate ItemTemplate { get; } = BuildTemplate();
 
     private static DataTemplate BuildTemplate()
     {
-        var grid = new FrameworkElementFactory(typeof(Grid));
-        grid.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
+        const string xaml = @"
+<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+             xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width=""Auto""/>
+      <ColumnDefinition Width=""*""/>
+    </Grid.ColumnDefinitions>
+    <Image Grid.Column=""0"" Source=""{Binding Icon}"" Width=""21"" Height=""14"" Margin=""0,0,6,0""
+           Stretch=""Uniform"" SnapsToDevicePixels=""True"" VerticalAlignment=""Center"">
+      <Image.Style>
+        <Style TargetType=""Image"">
+          <Setter Property=""Visibility"" Value=""Visible""/>
+          <Style.Triggers>
+            <DataTrigger Binding=""{Binding Icon}"" Value=""{x:Null}"">
+              <Setter Property=""Visibility"" Value=""Collapsed""/>
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </Image.Style>
+    </Image>
+    <TextBlock Grid.Column=""1"" Text=""{Binding Name}"" VerticalAlignment=""Center""
+               TextTrimming=""CharacterEllipsis""/>
+  </Grid>
+</DataTemplate>";
 
-        var block = new FrameworkElementFactory(typeof(StackPanel));
-        block.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
-        block.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-        block.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-
-        var icon = new FrameworkElementFactory(typeof(Image));
-        icon.SetBinding(Image.SourceProperty, new Binding(nameof(Icon)));
-        icon.SetBinding(UIElement.VisibilityProperty, new Binding(nameof(Icon))
-        {
-            Converter = NullToCollapsedConverter.Instance
-        });
-        icon.SetValue(Image.WidthProperty, 21d);
-        icon.SetValue(Image.HeightProperty, 14d);
-        icon.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 6, 0));
-        icon.SetValue(Image.StretchProperty, Stretch.Uniform);
-        icon.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-
-        var text = new FrameworkElementFactory(typeof(TextBlock));
-        text.SetBinding(TextBlock.TextProperty, new Binding(nameof(Name)));
-        text.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-        text.SetValue(FrameworkElement.MaxWidthProperty, 78d);
-        text.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
-
-        block.AppendChild(icon);
-        block.AppendChild(text);
-        grid.AppendChild(block);
-
-        var template = new DataTemplate();
-        template.VisualTree = grid;
-        return template;
+        return (DataTemplate)XamlReader.Parse(xaml);
     }
-}
-
-/// <summary>Hides an image without a source, so it leaves no empty gap.</summary>
-public sealed class NullToCollapsedConverter : IValueConverter
-{
-    public static readonly NullToCollapsedConverter Instance = new();
-
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value == null ? Visibility.Collapsed : Visibility.Visible;
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
