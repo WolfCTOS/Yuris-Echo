@@ -2196,31 +2196,6 @@ public partial class MainWindow : Window
     private static readonly Dictionary<string, ImageSource?> _factionIconCache =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private static FrameworkElement FactionComboItem(string label, ImageSource? icon)
-    {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        if (icon != null)
-        {
-            panel.Children.Add(new Image
-            {
-                Source = icon,
-                Width = 21,
-                Height = 14,
-                Margin = new Thickness(0, 0, 6, 0),
-                Stretch = Stretch.Uniform,
-                SnapsToDevicePixels = true,
-                VerticalAlignment = VerticalAlignment.Center
-            });
-        }
-        panel.Children.Add(new TextBlock
-        {
-            Text = label,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-        return panel;
-    }
-
     private static ImageSource? LoadFactionIcon(string? key)
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
@@ -2399,9 +2374,10 @@ public partial class MainWindow : Window
             // factions of rulesmd.ini. Random is stored as -1.
             var countries = RulesCountries.Load();
             var side = PlayerCombo();
-            side.Items.Add(FactionComboItem(L10n.T("Случайно"), null));
+            side.ItemTemplate = FactionChoice.ItemTemplate;
+            side.Items.Add(new FactionChoice(L10n.T("Случайно"), null));
             foreach (var faction in factions)
-                side.Items.Add(FactionComboItem(L10n.T(faction.Name), ResolveFactionIcon(faction, countries)));
+                side.Items.Add(new FactionChoice(L10n.T(faction.Name), ResolveFactionIcon(faction, countries)));
             var picked = player.Country < 0 ? 0 : factions.FindIndex(f => f.PrimaryIndex == player.Country) + 1;
             side.SelectedIndex = picked > 0 ? Math.Clamp(picked, 1, side.Items.Count - 1) : 0;
             side.SelectionChanged += (_, _) =>
